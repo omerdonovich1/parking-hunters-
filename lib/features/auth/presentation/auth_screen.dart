@@ -1,9 +1,9 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/app_router.dart';
 import '../../../providers/demo_provider.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
@@ -13,7 +13,8 @@ class AuthScreen extends ConsumerStatefulWidget {
   ConsumerState<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends ConsumerState<AuthScreen> {
+class _AuthScreenState extends ConsumerState<AuthScreen>
+    with SingleTickerProviderStateMixin {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
@@ -21,12 +22,26 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   bool _isSignUp = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
+  late AnimationController _animController;
+  late Animation<double> _fadeAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
+    _animController.forward();
+  }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     _nameController.dispose();
+    _animController.dispose();
     super.dispose();
   }
 
@@ -49,11 +64,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       }
       if (mounted) context.go('/');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) _showError(e.toString());
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -62,15 +73,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   Future<void> _handleGoogleSignIn() async {
     setState(() => _isLoading = true);
     try {
-      final authService = ref.read(authServiceProvider);
-      final user = await authService.signInWithGoogle();
+      final user = await ref.read(authServiceProvider).signInWithGoogle();
       if (user != null && mounted) context.go('/');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Google sign in failed: $e'), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) _showError('Google sign in failed');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -79,54 +85,103 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   Future<void> _handleAppleSignIn() async {
     setState(() => _isLoading = true);
     try {
-      final authService = ref.read(authServiceProvider);
-      final user = await authService.signInWithApple();
+      final user = await ref.read(authServiceProvider).signInWithApple();
       if (user != null && mounted) context.go('/');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Apple sign in failed: $e'), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) _showError('Apple sign in failed');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: AppTheme.neonRed,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 40),
-              _buildLogo(),
-              const SizedBox(height: 40),
-              _buildSocialButtons(),
-              const SizedBox(height: 24),
-              _buildDivider(),
-              const SizedBox(height: 24),
-              _buildEmailForm(),
-              const SizedBox(height: 16),
-              _buildSubmitButton(),
-              const SizedBox(height: 16),
-              _buildToggleMode(),
-              const SizedBox(height: 32),
-              TextButton(
-                onPressed: () {
-                  ref.read(demoModeProvider.notifier).state = true;
-                },
-                child: Text(
-                  'Try Demo Mode (no login required)',
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+      backgroundColor: AppTheme.bg,
+      body: Stack(
+        children: [
+          // Background glow
+          Positioned(
+            top: -100,
+            left: -80,
+            child: Container(
+              width: 350,
+              height: 350,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppTheme.orange.withValues(alpha: 0.15),
+                    Colors.transparent,
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+          Positioned(
+            bottom: -80,
+            right: -60,
+            child: Container(
+              width: 280,
+              height: 280,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppTheme.neonGreen.withValues(alpha: 0.08),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Content
+          SafeArea(
+            child: FadeTransition(
+              opacity: _fadeAnim,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 32),
+                    _buildLogo(),
+                    const SizedBox(height: 44),
+                    _buildSocialButtons(),
+                    const SizedBox(height: 28),
+                    _buildDivider(),
+                    const SizedBox(height: 28),
+                    _buildEmailForm(),
+                    const SizedBox(height: 20),
+                    _buildSubmitButton(),
+                    const SizedBox(height: 20),
+                    _buildToggleMode(),
+                    const SizedBox(height: 36),
+                    _buildDemoButton(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_isLoading)
+            Container(
+              color: Colors.black.withValues(alpha: 0.4),
+              child: const Center(
+                child: CircularProgressIndicator(color: AppTheme.orange),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -135,35 +190,45 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     return Column(
       children: [
         Container(
-          width: 90,
-          height: 90,
+          width: 88,
+          height: 88,
           decoration: BoxDecoration(
-            color: AppTheme.primaryColor,
-            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(
+              colors: [AppTheme.orange, Color(0xFFFF8C5A)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.primaryColor.withValues(alpha: 0.4),
-                blurRadius: 20,
+                color: AppTheme.orange.withValues(alpha: 0.45),
+                blurRadius: 28,
                 offset: const Offset(0, 8),
               ),
             ],
           ),
           child: const Center(
-            child: Text('🅿️', style: TextStyle(fontSize: 44)),
+            child: Text('🅿️', style: TextStyle(fontSize: 42)),
           ),
         ),
-        const SizedBox(height: 16),
-        Text(
+        const SizedBox(height: 18),
+        const Text(
           'Parking Hunter',
-          style: Theme.of(context).textTheme.displayMedium?.copyWith(
-            color: AppTheme.primaryColor,
-            fontWeight: FontWeight.bold,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 30,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.5,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Text(
           'Hunt. Report. Earn Points.',
-          style: Theme.of(context).textTheme.bodyMedium,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.45),
+            fontSize: 14,
+            letterSpacing: 0.3,
+          ),
         ),
       ],
     );
@@ -173,43 +238,57 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        OutlinedButton(
-          onPressed: _isLoading ? null : _handleGoogleSignIn,
-          style: OutlinedButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.black87,
-            side: const BorderSide(color: Colors.grey),
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          child: const Row(
+        _GlassButton(
+          onTap: _isLoading ? null : _handleGoogleSignIn,
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('G', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue)),
-              SizedBox(width: 12),
-              Text('Continue with Google', style: TextStyle(fontSize: 16)),
+              Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Center(
+                  child: Text(
+                    'G',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF4285F4),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Continue with Google',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
         ),
         const SizedBox(height: 12),
-        ElevatedButton(
-          onPressed: _isLoading ? null : _handleAppleSignIn,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.black,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
+        _GlassButton(
+          onTap: _isLoading ? null : _handleAppleSignIn,
           child: const Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('🍎', style: TextStyle(fontSize: 20)),
-              SizedBox(width: 12),
-              Text('Continue with Apple', style: TextStyle(fontSize: 16)),
+              Icon(Icons.apple, color: Colors.white, size: 22),
+              SizedBox(width: 10),
+              Text(
+                'Continue with Apple',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
         ),
@@ -220,12 +299,22 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   Widget _buildDivider() {
     return Row(
       children: [
-        const Expanded(child: Divider()),
+        Expanded(
+          child: Divider(color: Colors.white.withValues(alpha: 0.1), thickness: 1),
+        ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text('or', style: Theme.of(context).textTheme.bodyMedium),
+          child: Text(
+            'or',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.3),
+              fontSize: 13,
+            ),
+          ),
         ),
-        const Expanded(child: Divider()),
+        Expanded(
+          child: Divider(color: Colors.white.withValues(alpha: 0.1), thickness: 1),
+        ),
       ],
     );
   }
@@ -236,44 +325,42 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       child: Column(
         children: [
           if (_isSignUp) ...[
-            TextFormField(
+            _DarkTextField(
               controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Display Name',
-                prefixIcon: Icon(Icons.person_outline),
-              ),
+              hint: 'Display Name',
+              icon: Icons.person_outline,
               validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Please enter your name' : null,
+                  v == null || v.trim().isEmpty ? 'Enter your name' : null,
             ),
             const SizedBox(height: 12),
           ],
-          TextFormField(
+          _DarkTextField(
             controller: _emailController,
+            hint: 'Email',
+            icon: Icons.email_outlined,
             keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(
-              labelText: 'Email',
-              prefixIcon: Icon(Icons.email_outlined),
-            ),
             validator: (v) =>
-                v == null || !v.contains('@') ? 'Please enter a valid email' : null,
+                v == null || !v.contains('@') ? 'Enter a valid email' : null,
           ),
           const SizedBox(height: 12),
-          TextFormField(
+          _DarkTextField(
             controller: _passwordController,
+            hint: 'Password',
+            icon: Icons.lock_outline,
             obscureText: _obscurePassword,
-            decoration: InputDecoration(
-              labelText: 'Password',
-              prefixIcon: const Icon(Icons.lock_outline),
-              suffixIcon: IconButton(
-                icon: Icon(_obscurePassword
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscurePassword
                     ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined),
-                onPressed: () =>
-                    setState(() => _obscurePassword = !_obscurePassword),
+                    : Icons.visibility_off_outlined,
+                color: Colors.white38,
+                size: 20,
               ),
+              onPressed: () =>
+                  setState(() => _obscurePassword = !_obscurePassword),
             ),
             validator: (v) =>
-                v == null || v.length < 6 ? 'Password must be at least 6 characters' : null,
+                v == null || v.length < 6 ? 'Min 6 characters' : null,
           ),
         ],
       ),
@@ -281,18 +368,35 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   }
 
   Widget _buildSubmitButton() {
-    return ElevatedButton(
-      onPressed: _isLoading ? null : _handleEmailAuth,
-      child: _isLoading
-          ? const SizedBox(
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
-          : Text(_isSignUp ? 'Create Account' : 'Sign In'),
+    return GestureDetector(
+      onTap: _isLoading ? null : _handleEmailAuth,
+      child: Container(
+        height: 54,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [AppTheme.orange, Color(0xFFFF8C5A)],
+          ),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.orange.withValues(alpha: 0.4),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Text(
+            _isSignUp ? 'Create Account' : 'Sign In',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -302,19 +406,132 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       children: [
         Text(
           _isSignUp ? 'Already have an account? ' : "Don't have an account? ",
-          style: Theme.of(context).textTheme.bodyMedium,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.4),
+            fontSize: 13,
+          ),
         ),
         GestureDetector(
           onTap: () => setState(() => _isSignUp = !_isSignUp),
           child: Text(
             _isSignUp ? 'Sign In' : 'Sign Up',
             style: const TextStyle(
-              color: AppTheme.primaryColor,
-              fontWeight: FontWeight.bold,
+              color: AppTheme.orange,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildDemoButton() {
+    return GestureDetector(
+      onTap: () => ref.read(demoModeProvider.notifier).state = true,
+      child: Text(
+        'Try Demo Mode — no login required',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.2),
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+}
+
+// Glass button used for social sign-in
+class _GlassButton extends StatelessWidget {
+  final VoidCallback? onTap;
+  final Widget child;
+
+  const _GlassButton({required this.onTap, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            height: 54,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.12),
+                width: 1,
+              ),
+            ),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Dark-themed text field
+class _DarkTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final IconData icon;
+  final bool obscureText;
+  final TextInputType? keyboardType;
+  final Widget? suffixIcon;
+  final String? Function(String?)? validator;
+
+  const _DarkTextField({
+    required this.controller,
+    required this.hint,
+    required this.icon,
+    this.obscureText = false,
+    this.keyboardType,
+    this.suffixIcon,
+    this.validator,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      obscureText: obscureText,
+      keyboardType: keyboardType,
+      validator: validator,
+      style: const TextStyle(color: Colors.white, fontSize: 15),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 15),
+        prefixIcon: Icon(icon, color: Colors.white38, size: 20),
+        suffixIcon: suffixIcon,
+        filled: true,
+        fillColor: Colors.white.withValues(alpha: 0.06),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppTheme.orange, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppTheme.neonRed),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppTheme.neonRed),
+        ),
+        errorStyle: const TextStyle(color: AppTheme.neonRed, fontSize: 12),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      ),
     );
   }
 }

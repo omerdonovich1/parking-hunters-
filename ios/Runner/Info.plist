@@ -36,9 +36,18 @@
 		<string>Take a photo of the parking spot to help other drivers verify it.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>Choose a photo from your library to attach to the parking report.</string>
-		<!-- Google Maps iOS SDK key — replace YOUR_IOS_MAPS_API_KEY in AppDelegate.swift -->
-		<key>GMSApiKey</key>
-		<string>YOUR_IOS_MAPS_API_KEY</string>
+		<!-- Google Sign-In URL scheme (required for OAuth redirect) -->
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>com.googleusercontent.apps.859365520944-k2of66h1lbu2eehtlbko1q6nt3mn2fia</string>
+				</array>
+			</dict>
+		</array>
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>
