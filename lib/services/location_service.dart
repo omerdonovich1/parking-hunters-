@@ -1,0 +1,55 @@
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:flutter/foundation.dart';
+
+class LocationService {
+  Future<bool> requestPermission() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    return permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse;
+  }
+
+  Future<bool> isPermissionGranted() async {
+    final permission = await Geolocator.checkPermission();
+    return permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse;
+  }
+
+  Future<Position> getCurrentPosition() async {
+    final hasPermission = await requestPermission();
+    if (!hasPermission) {
+      throw Exception('Location permission denied');
+    }
+    try {
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Get position error: $e');
+      rethrow;
+    }
+  }
+
+  Future<String> getAddressFromCoords(double lat, double lng) async {
+    try {
+      final placemarks = await placemarkFromCoordinates(lat, lng);
+      if (placemarks.isEmpty) return '$lat, $lng';
+      final place = placemarks.first;
+      final parts = <String>[
+        if (place.street != null && place.street!.isNotEmpty) place.street!,
+        if (place.locality != null && place.locality!.isNotEmpty) place.locality!,
+        if (place.country != null && place.country!.isNotEmpty) place.country!,
+      ];
+      return parts.isNotEmpty ? parts.join(', ') : '$lat, $lng';
+    } catch (e) {
+      debugPrint('Geocoding error: $e');
+      return '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
+    }
+  }
+}

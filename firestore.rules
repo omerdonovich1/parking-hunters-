@@ -1,0 +1,74 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isValidSpotStatus() {
+      return request.resource.data.status in
+        ['available', 'soonAvailable', 'lowConfidence', 'taken'];
+    }
+
+    function isNotExpired() {
+      return request.resource.data.expiresAt > request.time;
+    }
+
+    // ── Users ─────────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Anyone signed in can read public profiles (for leaderboard)
+      allow read: if isSignedIn();
+
+      // Only the owner can create or update their own profile
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId);
+
+      // No deletes allowed (contact support to delete account)
+      allow delete: if false;
+    }
+
+    // ── Parking Spots ─────────────────────────────────────────────────────────
+    match /parking_spots/{spotId} {
+      // Anyone signed in can read spots
+      allow read: if isSignedIn();
+
+      // Only authenticated users can create a spot with a valid status
+      allow create: if isSignedIn()
+        && isValidSpotStatus()
+        && isNotExpired()
+        && request.resource.data.reportedBy == request.auth.uid;
+
+      // Authenticated users can update confidence/status (confirm / deny / mark taken)
+      // but cannot change the reporter or location
+      allow update: if isSignedIn()
+        && isValidSpotStatus()
+        && request.resource.data.reportedBy == resource.data.reportedBy
+        && request.resource.data.lat == resource.data.lat
+        && request.resource.data.lng == resource.data.lng;
+
+      // Only the original reporter can delete their spot
+      allow delete: if isSignedIn()
+        && resource.data.reportedBy == request.auth.uid;
+    }
+
+    // ── Reports ───────────────────────────────────────────────────────────────
+    match /reports/{reportId} {
+      // Authenticated users can read all reports
+      allow read: if isSignedIn();
+
+      // Only the authenticated user can create their own report
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+
+      // No updates or deletes on raw reports (immutable audit trail)
+      allow update, delete: if false;
+    }
+  }
+}
