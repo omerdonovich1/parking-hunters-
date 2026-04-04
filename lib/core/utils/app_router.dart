@@ -13,6 +13,63 @@ import '../../providers/auth_provider.dart';
 import '../../providers/demo_provider.dart';
 import '../../services/onboarding_service.dart';
 
+// ── Transition helpers ────────────────────────────────────────────────────────
+
+/// iOS-style slide in from right, slide out to left.
+CustomTransitionPage<void> _slidePage(GoRouterState state, Widget child) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    child: child,
+    transitionDuration: const Duration(milliseconds: 300),
+    reverseTransitionDuration: const Duration(milliseconds: 250),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final slideIn = Tween<Offset>(
+        begin: const Offset(1.0, 0),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+
+      final slideOut = Tween<Offset>(
+        begin: Offset.zero,
+        end: const Offset(-0.25, 0),
+      ).animate(CurvedAnimation(parent: secondaryAnimation, curve: Curves.easeOutCubic));
+
+      return SlideTransition(
+        position: slideOut,
+        child: SlideTransition(position: slideIn, child: child),
+      );
+    },
+  );
+}
+
+/// Modal slide up from bottom (for report, settings, etc.)
+CustomTransitionPage<void> _slideUpPage(GoRouterState state, Widget child) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    child: child,
+    transitionDuration: const Duration(milliseconds: 350),
+    reverseTransitionDuration: const Duration(milliseconds: 280),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final slideUp = Tween<Offset>(
+        begin: const Offset(0, 1.0),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+
+      return SlideTransition(position: slideUp, child: child);
+    },
+  );
+}
+
+/// Fade transition for root/tab switches.
+CustomTransitionPage<void> _fadePage(GoRouterState state, Widget child) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    child: child,
+    transitionDuration: const Duration(milliseconds: 200),
+    transitionsBuilder: (context, animation, _, child) =>
+        FadeTransition(opacity: animation, child: child),
+  );
+}
+
 /// Async provider — true once onboarding has been completed before.
 final onboardingCompleteProvider = FutureProvider<bool>((ref) async {
   return OnboardingService().isOnboardingComplete();
@@ -69,38 +126,38 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/onboarding',
-        builder: (_, __) => const OnboardingScreen(),
+        pageBuilder: (_, s) => _slidePage(s, const OnboardingScreen()),
       ),
       GoRoute(
         path: '/auth',
-        builder: (_, __) => const AuthScreen(),
+        pageBuilder: (_, s) => _fadePage(s, const AuthScreen()),
       ),
       ShellRoute(
         builder: (context, state, child) => HomeScreen(child: child),
         routes: [
           GoRoute(
             path: '/',
-            builder: (_, __) => const MapScreen(),
+            pageBuilder: (_, s) => _fadePage(s, const MapScreen()),
           ),
           GoRoute(
             path: '/map',
-            builder: (_, __) => const MapScreen(),
+            pageBuilder: (_, s) => _fadePage(s, const MapScreen()),
           ),
           GoRoute(
             path: '/report',
-            builder: (_, __) => const ReportScreen(),
+            pageBuilder: (_, s) => _slideUpPage(s, const ReportScreen()),
           ),
           GoRoute(
             path: '/profile',
-            builder: (_, __) => const ProfileScreen(),
+            pageBuilder: (_, s) => _slidePage(s, const ProfileScreen()),
           ),
           GoRoute(
             path: '/leaderboard',
-            builder: (_, __) => const LeaderboardScreen(),
+            pageBuilder: (_, s) => _slidePage(s, const LeaderboardScreen()),
           ),
           GoRoute(
             path: '/settings',
-            builder: (_, __) => const SettingsScreen(),
+            pageBuilder: (_, s) => _slideUpPage(s, const SettingsScreen()),
           ),
         ],
       ),
