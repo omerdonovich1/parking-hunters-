@@ -460,7 +460,7 @@ class _TipPainter extends CustomPainter {
   bool shouldRepaint(_) => false;
 }
 
-// ── Pulsing location dot ─────────────────────────────────────────────────────
+// ── Car location indicator ──────────────────────────────────────────────────
 class _LocationDot extends StatelessWidget {
   final AnimationController pulseController;
   const _LocationDot({required this.pulseController});
@@ -472,22 +472,34 @@ class _LocationDot extends StatelessWidget {
       builder: (_, __) => Stack(
         alignment: Alignment.center,
         children: [
+          // Pulsing outer glow
           Container(
-            width: 24 + 8 * pulseController.value,
-            height: 24 + 8 * pulseController.value,
+            width: 40 + 8 * pulseController.value,
+            height: 40 + 8 * pulseController.value,
             decoration: BoxDecoration(
-              color: AppTheme.orange.withValues(alpha: 0.15 * (1 - pulseController.value)),
+              color: AppTheme.orange.withValues(alpha: 0.12 * (1 - pulseController.value)),
               shape: BoxShape.circle,
             ),
           ),
+          // Car icon container
           Container(
-            width: 14,
-            height: 14,
+            width: 32,
+            height: 32,
             decoration: BoxDecoration(
               color: AppTheme.orange,
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 2.5),
-              boxShadow: [BoxShadow(color: AppTheme.orange.withValues(alpha: 0.5), blurRadius: 8)],
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.orange.withValues(alpha: 0.6),
+                  blurRadius: 12,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.directions_car,
+              color: Colors.white,
+              size: 18,
             ),
           ),
         ],
