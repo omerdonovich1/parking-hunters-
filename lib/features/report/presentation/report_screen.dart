@@ -120,7 +120,13 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
   }
 
   void _nextStep() {
-    if (_currentStep < 3) setState(() => _currentStep++);
+    if (_currentStep < 3) {
+      setState(() => _currentStep++);
+      // Auto-trigger AI scan when entering step 3
+      if (_currentStep == 2) {
+        Future.microtask(() => ref.read(reportProvider.notifier).scanWithAI());
+      }
+    }
   }
 
   void _prevStep() {
@@ -587,8 +593,28 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                 ],
               ),
             ),
-          if (hasResult)
-            _buildResultCard(result!),
+          if (hasResult) _buildResultCard(result!),
+          if (reportState.error != null && !isScanning) ...[
+            const SizedBox(height: 8),
+            _GlassCard(
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      reportState.error!,
+                      style: const TextStyle(color: Colors.orange, fontSize: 12),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => ref.read(reportProvider.notifier).scanWithAI(),
+                    child: const Text('Retry', style: TextStyle(color: AppTheme.orange, fontWeight: FontWeight.w700, fontSize: 13)),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -819,7 +845,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
     final canNext = switch (_currentStep) {
       0 => _lat != null,
       1 => reportState.selectedImagePath != null,
-      2 => reportState.aiScanResult != null,
+      2 => reportState.aiScanResult != null && !reportState.isScanning,
       _ => true,
     };
 
