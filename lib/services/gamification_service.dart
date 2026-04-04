@@ -1,5 +1,6 @@
 import '../models/user_model.dart';
 import '../models/badge_model.dart';
+import '../models/daily_mission_model.dart';
 import '../core/utils/constants.dart';
 
 class GamificationService {
@@ -71,5 +72,26 @@ class GamificationService {
     final levelStart = thresholds[currentLevel].toDouble();
     final levelEnd = thresholds[currentLevel + 1].toDouble();
     return (currentPoints - levelStart) / (levelEnd - levelStart);
+  }
+
+  /// Returns today's daily mission.
+  DailyMission getDailyMission() => DailyMission.forToday();
+
+  /// Returns true if the user's streak is at risk (reported yesterday but not yet today).
+  bool isStreakInDanger(AppUser user) {
+    if (user.currentStreak == 0) return false;
+    final last = user.lastReportDate;
+    if (last == null) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final lastDay = DateTime(last.year, last.month, last.day);
+    return today.difference(lastDay).inDays >= 1;
+  }
+
+  /// Returns badge IDs that were newly earned compared to [previousBadgeIds].
+  List<String> checkNewBadges(AppUser user, List<String> previousBadgeIds) {
+    final nowEarned = getEarnedBadges(user).map((b) => b.id).toSet();
+    final previous = previousBadgeIds.toSet();
+    return nowEarned.difference(previous).toList();
   }
 }

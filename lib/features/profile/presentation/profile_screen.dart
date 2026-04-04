@@ -4,8 +4,10 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:percent_indicator/linear_percent_indicator.dart';
 import '../../../models/badge_model.dart' as badge_model;
+import '../../../models/daily_mission_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/profile_provider.dart';
+import '../../../services/gamification_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../features/gamification/domain/league_model.dart';
 
@@ -18,6 +20,9 @@ class ProfileScreen extends ConsumerWidget {
     final gamService = ref.watch(gamificationServiceProvider);
     final earnedBadges = ref.watch(earnedBadgesProvider);
     final authService = ref.read(authServiceProvider);
+    final mission = ref.watch(dailyMissionProvider);
+    final todayCount = ref.watch(todayReportsCountProvider);
+    final missionDone = ref.watch(missionCompletedTodayProvider);
 
     if (user == null) {
       return const Center(child: CircularProgressIndicator());
@@ -26,6 +31,7 @@ class ProfileScreen extends ConsumerWidget {
     final levelProgress = gamService.getLevelProgress(user.points);
     final levelTitle = gamService.getLevelTitle(user.level);
     final pointsToNext = gamService.getPointsToNextLevel(user.points);
+    final streakInDanger = gamService.isStreakInDanger(user);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
@@ -42,11 +48,13 @@ class ProfileScreen extends ConsumerWidget {
           _buildProfileHeader(context, user.displayName, user.photoUrl,
               levelTitle, user.level),
           const SizedBox(height: 20),
+          _buildDailyMissionCard(context, mission, todayCount, missionDone),
+          const SizedBox(height: 16),
           _buildPointsCard(context, user.points, levelProgress, pointsToNext, user.level),
           const SizedBox(height: 16),
           _buildStatsRow(context, user.totalReports, earnedBadges.length, user.level),
           const SizedBox(height: 12),
-          _buildStreakCard(context, user.currentStreak, user.longestStreak),
+          _buildStreakCard(context, user.currentStreak, user.longestStreak, streakInDanger),
           const SizedBox(height: 24),
           _buildBadgesSection(context, earnedBadges),
           const SizedBox(height: 24),
@@ -134,6 +142,129 @@ class ProfileScreen extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  Widget _buildDailyMissionCard(
+    BuildContext context,
+    DailyMission mission,
+    int todayCount,
+    bool isCompleted,
+  ) {
+    final progress = (todayCount / mission.targetCount).clamp(0.0, 1.0);
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isCompleted
+              ? AppTheme.neonGreen.withValues(alpha: 0.5)
+              : AppTheme.orange.withValues(alpha: 0.4),
+          width: 1.5,
+        ),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isCompleted
+              ? [
+                  AppTheme.neonGreen.withValues(alpha: 0.08),
+                  AppTheme.card,
+                ]
+              : [
+                  AppTheme.orange.withValues(alpha: 0.08),
+                  AppTheme.card,
+                ],
+        ),
+      ),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(mission.emoji, style: const TextStyle(fontSize: 26)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Daily Mission',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: isCompleted
+                                    ? AppTheme.neonGreen
+                                    : AppTheme.orange,
+                                letterSpacing: 1.2,
+                              ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: isCompleted
+                                ? AppTheme.neonGreen.withValues(alpha: 0.15)
+                                : AppTheme.orange.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            isCompleted ? '✓ Done' : '+${mission.xpReward} XP',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: isCompleted
+                                  ? AppTheme.neonGreen
+                                  : AppTheme.orange,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      mission.title,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    Text(
+                      mission.description,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: LinearPercentIndicator(
+                  percent: progress,
+                  lineHeight: 10,
+                  backgroundColor: AppTheme.cardBorder,
+                  progressColor:
+                      isCompleted ? AppTheme.neonGreen : AppTheme.orange,
+                  barRadius: const Radius.circular(5),
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                '${todayCount.clamp(0, mission.targetCount)}/${mission.targetCount}',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: isCompleted ? AppTheme.neonGreen : AppTheme.orange,
+                    ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0);
   }
 
   Widget _buildPointsCard(
@@ -229,74 +360,140 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildStreakCard(BuildContext context, int currentStreak, int longestStreak) {
+  Widget _buildStreakCard(BuildContext context, int currentStreak, int longestStreak, bool inDanger) {
     final isOnFire = currentStreak >= 3;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: isOnFire
-                    ? Colors.orange.withValues(alpha: 0.15)
-                    : Colors.grey.shade100,
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Text(
-                  isOnFire ? '🔥' : '📅',
-                  style: const TextStyle(fontSize: 26),
+    final dangerColor = const Color(0xFFFF1744);
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: inDanger
+              ? dangerColor.withValues(alpha: 0.6)
+              : AppTheme.cardBorder,
+          width: inDanger ? 1.5 : 1,
+        ),
+        color: AppTheme.card,
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: inDanger
+                      ? dangerColor.withValues(alpha: 0.12)
+                      : isOnFire
+                          ? Colors.orange.withValues(alpha: 0.15)
+                          : AppTheme.cardBorder,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    inDanger ? '⚠️' : (isOnFire ? '🔥' : '📅'),
+                    style: const TextStyle(fontSize: 26),
+                  ),
+                ),
+              )
+                  .animate(
+                    onPlay: inDanger ? (c) => c.repeat(reverse: true) : null,
+                  )
+                  .scaleXY(
+                    begin: 1.0,
+                    end: inDanger ? 1.08 : 1.0,
+                    duration: 700.ms,
+                  ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      currentStreak == 0
+                          ? 'No active streak'
+                          : '$currentStreak-day streak!',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: inDanger
+                                ? dangerColor
+                                : isOnFire
+                                    ? Colors.orange
+                                    : null,
+                          ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Best: $longestStreak day${longestStreak == 1 ? '' : 's'}  •  Report daily to keep your streak',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    currentStreak == 0
-                        ? 'No active streak'
-                        : '$currentStreak-day streak!',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: isOnFire ? Colors.orange : null,
-                        ),
+              if (currentStreak > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: inDanger
+                        ? dangerColor.withValues(alpha: 0.12)
+                        : isOnFire
+                            ? Colors.orange.withValues(alpha: 0.15)
+                            : AppTheme.cardBorder,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: inDanger
+                          ? dangerColor
+                          : isOnFire
+                              ? Colors.orange
+                              : AppTheme.cardBorder,
+                    ),
                   ),
-                  const SizedBox(height: 2),
+                  child: Text(
+                    '×$currentStreak',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: inDanger
+                          ? dangerColor
+                          : isOnFire
+                              ? Colors.orange
+                              : Colors.grey,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (inDanger && currentStreak > 0) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: dangerColor.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded,
+                      color: dangerColor, size: 16),
+                  const SizedBox(width: 8),
                   Text(
-                    'Best: $longestStreak day${longestStreak == 1 ? '' : 's'}  •  Report daily to keep your streak',
-                    style: Theme.of(context).textTheme.bodyMedium,
+                    'Report a spot today to keep your streak!',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: dangerColor,
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                 ],
               ),
-            ),
-            if (currentStreak > 0)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isOnFire
-                      ? Colors.orange.withValues(alpha: 0.15)
-                      : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isOnFire ? Colors.orange : Colors.grey.shade300,
-                  ),
-                ),
-                child: Text(
-                  '×$currentStreak',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: isOnFire ? Colors.orange : Colors.grey,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
+            ).animate(onPlay: (c) => c.repeat(reverse: true)).fadeIn(
+                begin: 0.6, end: 1.0, duration: 1200.ms),
           ],
-        ),
+        ],
       ),
     ).animate().fadeIn(delay: 200.ms);
   }

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/user_model.dart';
 import '../models/badge_model.dart';
+import '../models/daily_mission_model.dart';
 import '../services/firestore_service.dart';
 import '../services/gamification_service.dart';
 import '../services/fcm_service.dart';
@@ -78,7 +79,7 @@ class UserProfileNotifier extends StateNotifier<AppUser?> {
 
   void clearUser() => state = null;
 
-  Future<void> incrementReports() async {
+  Future<void> incrementReports({Ref? ref}) async {
     if (state == null) return;
 
     final now = DateTime.now();
@@ -87,18 +88,21 @@ class UserProfileNotifier extends StateNotifier<AppUser?> {
     final lastDay =
         last != null ? DateTime(last.year, last.month, last.day) : null;
 
+    // Streak logic
     int newStreak = state!.currentStreak;
     if (lastDay == null) {
       newStreak = 1;
     } else if (today.difference(lastDay).inDays == 1) {
-      // consecutive day
       newStreak += 1;
     } else if (today.difference(lastDay).inDays == 0) {
       // already reported today — keep streak
     } else {
-      // streak broken
       newStreak = 1;
     }
+
+    // Daily mission progress — reset if new day
+    final isNewDay = lastDay == null || today.difference(lastDay).inDays >= 1;
+    final newTodayCount = isNewDay ? 1 : state!.todayReportsCount + 1;
 
     state = state!.copyWith(
       totalReports: state!.totalReports + 1,
@@ -106,7 +110,23 @@ class UserProfileNotifier extends StateNotifier<AppUser?> {
       longestStreak:
           newStreak > state!.longestStreak ? newStreak : state!.longestStreak,
       lastReportDate: now,
+      todayReportsCount: newTodayCount,
     );
+
+    // Check daily mission completion and award bonus XP once
+    final mission = _gamificationService.getDailyMission();
+    final missionJustCompleted = newTodayCount == mission.targetCount;
+    final alreadyCompletedToday = state!.lastMissionCompletedDate != null &&
+        DateTime(state!.lastMissionCompletedDate!.year,
+                state!.lastMissionCompletedDate!.month,
+                state!.lastMissionCompletedDate!.day) ==
+            today;
+
+    if (missionJustCompleted && !alreadyCompletedToday) {
+      state = state!.copyWith(lastMissionCompletedDate: now);
+      await updatePoints(mission.xpReward, ref: ref);
+    }
+
     await _firestoreService.updateUser(state!);
     _checkAndAwardBadges();
   }
@@ -182,3 +202,34 @@ final earnedBadgesProvider = Provider<List<Badge>>((ref) {
 
 /// Non-null when the user just leveled up. UI should show overlay then call dismiss.
 final levelUpProvider = StateProvider<int?>((ref) => null);
+
+/// Today's daily mission.
+final dailyMissionProvider = Provider<DailyMission>((ref) {
+  return DailyMission.forToday();
+});
+
+/// How many spots the user has reported today.
+final todayReportsCountProvider = Provider<int>((ref) {
+  final user = ref.watch(userProfileProvider);
+  if (user == null) return 0;
+  final last = user.lastReportDate;
+  if (last == null) return 0;
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final lastDay = DateTime(last.year, last.month, last.day);
+  if (today.difference(lastDay).inDays > 0) return 0;
+  return user.todayReportsCount;
+});
+
+/// True if the daily mission is completed today.
+final missionCompletedTodayProvider = Provider<bool>((ref) {
+  final user = ref.watch(userProfileProvider);
+  if (user == null) return false;
+  final completed = user.lastMissionCompletedDate;
+  if (completed == null) return false;
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final completedDay =
+      DateTime(completed.year, completed.month, completed.day);
+  return today == completedDay;
+});
