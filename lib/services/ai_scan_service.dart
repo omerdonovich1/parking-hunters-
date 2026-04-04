@@ -17,7 +17,7 @@ class AiScanResult {
 }
 
 class AiScanService {
-  static const _endpoint = 'https://api.anthropic.com/v1/messages';
+  static const _endpoint = 'https://api.openai.com/v1/chat/completions';
 
   Future<AiScanResult> scanParkingPhoto(String imagePath) async {
     // Web cannot read local file paths — return a safe default
@@ -29,8 +29,8 @@ class AiScanService {
       );
     }
 
-    if (AppConfig.claudeApiKey.isEmpty || AppConfig.claudeApiKey == 'YOUR_CLAUDE_API_KEY') {
-      debugPrint('AiScanService: claudeApiKey not set in AppConfig');
+    if (AppConfig.openAiApiKey.isEmpty || AppConfig.openAiApiKey == 'YOUR_OPENAI_API_KEY') {
+      debugPrint('AiScanService: openAiApiKey not set in AppConfig');
       return const AiScanResult(
         isFree: true,
         confidence: 70,
@@ -52,22 +52,20 @@ class AiScanService {
             Uri.parse(_endpoint),
             headers: {
               'Content-Type': 'application/json',
-              'x-api-key': AppConfig.claudeApiKey,
-              'anthropic-version': '2023-06-01',
+              'Authorization': 'Bearer ${AppConfig.openAiApiKey}',
             },
             body: jsonEncode({
-              'model': 'claude-sonnet-4-6',
+              'model': 'gpt-4o',
               'max_tokens': 150,
               'messages': [
                 {
                   'role': 'user',
                   'content': [
                     {
-                      'type': 'image',
-                      'source': {
-                        'type': 'base64',
-                        'media_type': mediaType,
-                        'data': base64Image,
+                      'type': 'image_url',
+                      'image_url': {
+                        'url': 'data:$mediaType;base64,$base64Image',
+                        'detail': 'low',
                       },
                     },
                     {
@@ -86,7 +84,7 @@ class AiScanService {
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        final text = (body['content'][0]['text'] as String).trim();
+        final text = (body['choices'][0]['message']['content'] as String).trim();
         final jsonMatch = RegExp(r'\{.*\}', dotAll: true).firstMatch(text);
         if (jsonMatch != null) {
           final result = jsonDecode(jsonMatch.group(0)!);

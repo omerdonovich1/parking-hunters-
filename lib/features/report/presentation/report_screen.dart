@@ -583,7 +583,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                     child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.orange),
                   ),
                   SizedBox(width: 12),
-                  Text('Claude is analyzing your photo...', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                  Text('AI is analyzing your photo...', style: TextStyle(color: Colors.white70, fontSize: 14)),
                 ],
               ),
             ),

@@ -99,7 +99,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
     if (state.selectedImagePath == null) return null;
     state = state.copyWith(isScanning: true, clearError: true);
     final result = await _aiScanService.scanParkingPhoto(state.selectedImagePath!);
-    state = state.copyWith(isScanning: false, aiScanResult: result);
+    state = state.copyWith(isScanning: false, aiScanResult: result, error: result.reason.contains('key not configured') || result.reason.contains('Could not reach') || result.reason.contains('failed') ? result.reason : null);
     return result;
   }
 
