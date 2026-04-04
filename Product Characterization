@@ -1,0 +1,68 @@
+Parking Hunter — Product Characterization
+The Problem
+Finding parking in a city is frustrating. Drivers waste time circling blocks looking for a free spot, with no real-time information about where spaces are available.
+
+The Solution
+Parking Hunter is a crowd-sourced, gamified parking finder — like Waze, but for parking spots. Users report free spots in real time, and the community keeps the data fresh. The more people use it, the better it gets.
+
+Target Audience
+Urban drivers in busy cities
+Daily commuters
+Anyone who parks on the street regularly
+How It Works
+You find a free spot → open the app, tap the hunter button
+Take a photo → AI scans it and confirms the spot is actually free
+Pin your location → spot appears on the map for everyone nearby
+Spot expires in 30 minutes → unless someone confirms it's still free
+Someone takes the spot → they mark it as taken, it disappears instantly
+Key Features
+Map
+Full-screen dark map showing free spots nearby in real time
+Color-coded markers: green (high confidence), yellow (medium), red (low)
+Spot details: photo, time reported, AI confidence score, countdown to expiry
+AI Verification
+Every reported spot is scanned by Claude Vision AI
+AI returns: is it free? confidence % and reason
+Prevents fake or incorrect reports
+Gamification
+Earn points for every spot you report (+10 pts)
+Bonus points when your spot gets confirmed by others (+5 pts)
+Level up from Level 1 to Level 5
+Unlock badges: First Hunt, Speed Demon, Gold Hunter, Night Owl, and more
+Global leaderboard — compete with other hunters in your city
+Authentication
+Sign in with Google, Apple, or Email
+Demo mode — try the full app without signing in
+Platforms
+iOS (primary)
+Android (primary)
+Web (for preview/testing)
+Tech Stack
+Layer	Technology
+Mobile app	Flutter
+Database	Firebase Firestore (real-time)
+Photo storage	Firebase Storage
+Authentication	Firebase Auth
+Map	OpenStreetMap (free, no API key)
+AI scan	Claude Vision API
+State management	Riverpod
+Business Model (Future)
+Free tier — basic map and reporting
+Premium tier — advanced filters, spot notifications, no ads
+Ads — banner ads for free users (AdMob ready)
+Current Development Status
+Module	Status
+Map UI	✅ Complete
+Authentication	✅ Complete
+Report flow + AI scan	✅ Complete
+Real-time map data	🔧 In progress
+Profile + gamification	🔧 In progress
+Notifications	📋 Planned
+Navigation to spot	📋 Planned
+App Store / Play Store	📋 Planned
+Team
+Role	Branch
+P1 — Reporting & AI	feature/spot-reporting
+P2 — Live Map	feature/live-map
+P3 — Profile & Gamification	feature/profile-gamification
+GitHub: https://github.com/omerdonovich1/parking-hunters-

@@ -18,7 +18,7 @@ class Constants {
 
   static const double defaultLat = 32.0853;
   static const double defaultLng = 34.7818;
-  static const double defaultRadiusKm = 1.0;
+  static const double defaultRadiusKm = 0.2;
 
   static const String spotsCollection = 'parking_spots';
   static const String usersCollection = 'users';
