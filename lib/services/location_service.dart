@@ -53,6 +53,20 @@ class LocationService {
     }
   }
 
+  /// Returns a continuous stream of location updates as the user moves
+  /// Updates every 5 seconds or when user moves more than 10 meters
+  Stream<Position> getPositionStream() {
+    return Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10, // Update when moved 10+ meters
+        timeLimit: Duration(seconds: 5), // Or every 5 seconds
+      ),
+    ).handleError((e) {
+      debugPrint('✗ Location stream error: $e');
+    });
+  }
+
   Future<String> getAddressFromCoords(double lat, double lng) async {
     try {
       final placemarks = await placemarkFromCoordinates(lat, lng);

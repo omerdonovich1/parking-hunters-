@@ -40,6 +40,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   late AnimationController _pulseController;
   Timer? _panDebounceTimer;
+  StreamSubscription<Position>? _locationSubscription;
 
   @override
   void initState() {
@@ -49,6 +50,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
     _initLocation();
+    _startLocationTracking();
   }
 
   @override
@@ -56,6 +58,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _pulseController.dispose();
     _searchController.dispose();
     _panDebounceTimer?.cancel();
+    _locationSubscription?.cancel();
     super.dispose();
   }
 
@@ -108,6 +111,31 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 radiusKm: ref.read(nearbyRadiusProvider));
       }
     }
+  }
+
+  void _startLocationTracking() {
+    _locationSubscription = _locationService.getPositionStream().listen(
+      (position) {
+        final newLatLng = LatLng(position.latitude, position.longitude);
+
+        if (mounted) {
+          setState(() {
+            _currentPosition = newLatLng;
+          });
+
+          // Move map to follow user (smooth pan)
+          _mapController.move(newLatLng, _mapController.camera.zoom);
+
+          // Reload nearby spots (uses debounce from _onMapPanned)
+          _onMapPanned(position.latitude, position.longitude);
+
+          debugPrint('📍 Location updated: ${position.latitude}, ${position.longitude}');
+        }
+      },
+      onError: (e) {
+        debugPrint('❌ Location tracking error: $e');
+      },
+    );
   }
 
   Future<void> _searchAddress(String address) async {
