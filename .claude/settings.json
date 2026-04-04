@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth:*)",
+      "Read(//c/Users/user/.claude/projects/**)",
+      "Bash(powershell -Command \"Copy-Item -Recurse -Force 'C:\\\\Users\\\\user\\\\Desktop\\\\parking hunter\\\\build\\\\web' 'C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\Temp\\\\ph-web-build'\")",
+      "Bash(powershell -Command \"& 'C:\\\\flutter\\\\flutter\\\\bin\\\\flutter.bat' build web --release --base-href '/parking-hunters-/' && Copy-Item -Recurse -Force 'build\\\\web' 'C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\Temp\\\\ph-web-build'\")",
+      "Bash(powershell -Command \"ls C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\Temp\\\\ph-web-build\")",
+      "Bash(powershell -Command ':*)",
+      "Bash(powershell -Command \"ls C:\\\\ph-deploy | Select-Object -First 5\")",
+      "Bash(powershell -Command \"Get-ChildItem 'C:\\\\ph-deploy' | Select-Object Name\")"
+    ]
+  }
+}
