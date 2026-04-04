@@ -5,7 +5,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/map_provider.dart';
 
-final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
+final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.light);
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});

@@ -73,14 +73,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: Container(
                 height: 64,
                 decoration: BoxDecoration(
-                  color: AppTheme.card.withValues(alpha: 0.85),
+                  color: isMap
+                      ? AppTheme.card.withValues(alpha: 0.9)
+                      : Theme.of(context).cardColor.withValues(alpha: 0.97),
                   borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: AppTheme.cardBorder, width: 1),
+                  border: Border.all(
+                    color: isMap ? AppTheme.cardBorder : AppTheme.dividerLight,
+                    width: 1,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.4),
-                      blurRadius: 32,
-                      offset: const Offset(0, 8),
+                      color: isMap
+                          ? Colors.black.withValues(alpha: 0.35)
+                          : AppTheme.blue.withValues(alpha: 0.12),
+                      blurRadius: 24,
+                      offset: const Offset(0, 6),
                     ),
                   ],
                 ),
@@ -117,12 +124,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             decoration: BoxDecoration(
-              color: selected ? AppTheme.orange.withValues(alpha: 0.15) : Colors.transparent,
+              color: selected ? AppTheme.blue.withValues(alpha: 0.12) : Colors.transparent,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
               selected ? item.activeIcon : item.icon,
-              color: selected ? AppTheme.orange : const Color(0xFF4B5563),
+              color: selected ? AppTheme.blue : const Color(0xFF94A3B8),
               size: 22,
             ),
           ),
@@ -130,7 +137,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Text(
             item.label,
             style: TextStyle(
-              color: selected ? AppTheme.orange : const Color(0xFF4B5563),
+              color: selected ? AppTheme.blue : const Color(0xFF94A3B8),
               fontSize: 10,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             ),
