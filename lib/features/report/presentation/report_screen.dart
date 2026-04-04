@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shimmer/shimmer.dart';
 import '../../../providers/report_provider.dart';
 import '../../../services/location_service.dart';
 import '../../../services/ai_scan_service.dart';
@@ -581,21 +582,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                 ],
               ),
             ),
-          if (isScanning)
-            _GlassCard(
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.orange),
-                  ),
-                  SizedBox(width: 12),
-                  Text('AI is analyzing your photo...', style: TextStyle(color: Colors.white70, fontSize: 14)),
-                ],
-              ),
-            ),
+          if (isScanning) const _ScanShimmerCard(),
           if (hasResult) _buildResultCard(result!),
           if (reportState.error != null && !isScanning) ...[
             const SizedBox(height: 8),
@@ -956,6 +943,76 @@ class _GlassOutlinedButton extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Shimmer skeleton shown while AI scans ─────────────────────────────────────
+class _ScanShimmerCard extends StatelessWidget {
+  const _ScanShimmerCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer.fromColors(
+      baseColor: AppTheme.card,
+      highlightColor: AppTheme.cardBorder,
+      period: const Duration(milliseconds: 1200),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.cardBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Status row skeleton
+            Row(
+              children: [
+                Container(width: 24, height: 24, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12))),
+                const SizedBox(width: 10),
+                Container(width: 140, height: 14, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6))),
+                const Spacer(),
+                Container(width: 40, height: 20, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6))),
+              ],
+            ),
+            const SizedBox(height: 14),
+            // Progress bar skeleton
+            Container(
+              height: 6,
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(3)),
+            ),
+            const SizedBox(height: 12),
+            // Reason text skeleton — two lines
+            Container(width: double.infinity, height: 11, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+            const SizedBox(height: 6),
+            Container(width: 180, height: 11, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+            const SizedBox(height: 12),
+            // Label below
+            Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.orange.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'AI scanning your photo…',
+                    style: TextStyle(color: AppTheme.orange.withValues(alpha: 0.7), fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -7,6 +7,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:go_router/go_router.dart';
+import 'package:shimmer/shimmer.dart';
 import '../../../models/parking_spot_model.dart';
 import '../../../providers/map_provider.dart';
 import '../../../services/location_service.dart';
@@ -334,34 +335,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
             ),
           ),
 
-          // ── Loading indicator ──────────────────────────────────────────────
+          // ── Loading shimmer HUD ───────────────────────────────────────────
           if (_isLoadingLocation)
             Positioned(
               top: 130,
-              left: 0,
+              left: 20,
               right: 80,
-              child: Center(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: BackdropFilter(
-                    filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      decoration: AppTheme.glassCard(radius: 20),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(width: 14, height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.orange)),
-                          SizedBox(width: 10),
-                          Text('Finding your location…',
-                              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              child: _MapLoadingShimmer(),
             ),
         ],
       ),
@@ -383,6 +363,58 @@ class _MapScreenState extends ConsumerState<MapScreen>
         snapSizes: const [0.55, 0.92],
         builder: (_, scrollController) =>
             SpotBottomSheet(spot: spot, scrollController: scrollController),
+      ),
+    );
+  }
+}
+
+// ── Map loading shimmer HUD ──────────────────────────────────────────────────
+class _MapLoadingShimmer extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer.fromColors(
+      baseColor: AppTheme.card,
+      highlightColor: const Color(0xFF1C3558),
+      period: const Duration(milliseconds: 1000),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Fake pill — scanning indicator
+          ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.card,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(width: 12, height: 12, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
+                  const SizedBox(width: 8),
+                  Container(width: 130, height: 12, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6))),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          // Three ghost spot markers in a row
+          Row(
+            children: List.generate(3, (i) => Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white24),
+                ),
+              ),
+            )),
+          ),
+        ],
       ),
     );
   }
