@@ -58,6 +58,42 @@ class FirestoreService {
     }
   }
 
+  /// Resets the timer on an existing spot (deduplication).
+  Future<void> refreshSpot(String spotId, {int minutes = 60}) async {
+    try {
+      await _db.collection(Constants.spotsCollection).doc(spotId).update({
+        'expiresAt': Timestamp.fromDate(DateTime.now().add(Duration(minutes: minutes))),
+        'status': 'available',
+      });
+    } on FirebaseException catch (e) {
+      debugPrint('Firestore refreshSpot error: $e');
+    }
+  }
+
+  /// Returns the first active spot within [radiusMeters] of the given location, or null.
+  Future<ParkingSpot?> findNearbyActiveSpot(double lat, double lng, {double radiusMeters = 30}) async {
+    try {
+      final latDelta = radiusMeters / 111000.0;
+      final lngDelta = radiusMeters / (111000.0 * math.cos(lat * math.pi / 180));
+      final snap = await _db
+          .collection(Constants.spotsCollection)
+          .where('lat', isGreaterThan: lat - latDelta)
+          .where('lat', isLessThan: lat + latDelta)
+          .where('expiresAt', isGreaterThan: Timestamp.now())
+          .get();
+      for (final doc in snap.docs) {
+        final spot = ParkingSpot.fromMap(doc.data(), docId: doc.id);
+        if (spot.status == SpotStatus.taken) continue;
+        final dLng = (spot.lng - lng).abs();
+        if (dLng <= lngDelta) return spot;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('findNearbyActiveSpot error: $e');
+      return null;
+    }
+  }
+
   Stream<List<ParkingSpot>> getNearbySpots(
       double lat, double lng, double radiusKm) {
     try {

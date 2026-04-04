@@ -138,6 +138,16 @@ class ReportNotifier extends StateNotifier<ReportState> {
     try {
       final userId = _ref.read(currentUserProvider)?.uid ?? 'anonymous';
       final now = DateTime.now();
+
+      // Deduplication — if an active spot exists within 30m, refresh its timer instead
+      final nearby = await _firestoreService.findNearbyActiveSpot(lat, lng);
+      if (nearby != null) {
+        await _firestoreService.refreshSpot(nearby.id, minutes: estimatedMinutes);
+        await _ref.read(userProfileProvider.notifier).updatePoints(5);
+        state = state.copyWith(isLoading: false, isSuccess: true, clearImage: true, clearScanResult: true);
+        return;
+      }
+
       final uuid = const Uuid().v4();
 
       // Upload photo
