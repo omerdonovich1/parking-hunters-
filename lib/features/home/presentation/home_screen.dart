@@ -4,7 +4,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/l10n/app_strings.dart';
 import '../../../providers/profile_provider.dart';
+import '../../../providers/locale_provider.dart';
 import 'widgets/level_up_overlay.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -64,6 +66,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         bottomNavigationBar: _FloatingPillNav(
           selectedIndex: index,
           onTap: _onTabTapped,
+          s: ref.watch(appStringsProvider),
         ),
       ),
     );
@@ -74,17 +77,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 class _FloatingPillNav extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onTap;
+  final AppStrings s;
 
-  const _FloatingPillNav({required this.selectedIndex, required this.onTap});
-
-  static const _items = [
-    _NavDef(icon: Icons.radar_rounded,          label: 'Hunt'),
-    _NavDef(icon: Icons.person_outline_rounded,  label: 'Profile'),
-    _NavDef(icon: Icons.emoji_events_outlined,   label: 'Ranks'),
-  ];
+  const _FloatingPillNav({required this.selectedIndex, required this.onTap, required this.s});
 
   @override
   Widget build(BuildContext context) {
+    final items = [
+      _NavDef(icon: Icons.radar_rounded,          label: s.navHunt),
+      _NavDef(icon: Icons.person_outline_rounded,  label: s.navProfile),
+      _NavDef(icon: Icons.emoji_events_outlined,   label: s.navRanks),
+    ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(36, 0, 36, 28),
       child: ClipRRect(
@@ -114,13 +117,13 @@ class _FloatingPillNav extends StatelessWidget {
               ],
             ),
             child: Row(
-              children: List.generate(_items.length, (i) {
+              children: List.generate(items.length, (i) {
                 return Expanded(
                   child: GestureDetector(
                     onTap: () => onTap(i),
                     behavior: HitTestBehavior.opaque,
                     child: _PillNavItem(
-                      def: _items[i],
+                      def: items[i],
                       selected: i == selectedIndex,
                     ),
                   ),

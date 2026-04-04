@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/l10n/app_strings.dart';
+import '../../../providers/locale_provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../models/user_model.dart';
 import '../../../providers/map_provider.dart';
@@ -23,15 +25,16 @@ class LeaderboardScreen extends ConsumerWidget {
     final leaderboard = ref.watch(leaderboardStreamProvider);
     final currentUser = ref.watch(userProfileProvider);
     final scope = ref.watch(leagueScopeProvider);
+    final s = ref.watch(appStringsProvider);
 
     return Column(
       children: [
-        _buildHeader(context, ref, scope),
+        _buildHeader(context, ref, scope, s),
         Expanded(
           child: leaderboard.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Failed to load: $e')),
-            data: (users) => _buildList(context, users, currentUser),
+            error: (e, _) => Center(child: Text(s.failedToLoad(e.toString()))),
+            data: (users) => _buildList(context, s, users, currentUser),
           ),
         ),
       ],
@@ -39,14 +42,14 @@ class LeaderboardScreen extends ConsumerWidget {
   }
 
   Widget _buildHeader(
-      BuildContext context, WidgetRef ref, LeagueTab scope) {
+      BuildContext context, WidgetRef ref, LeagueTab scope, AppStrings s) {
     return Container(
       color: AppTheme.primaryColor,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       child: Column(
         children: [
-          const Text(
-            '🏆 Weekly League',
+          Text(
+            s.leaderboardTitle,
             style: TextStyle(
               color: Colors.white,
               fontSize: 20,
@@ -74,7 +77,7 @@ class LeaderboardScreen extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(25),
                       ),
                       child: Text(
-                        tab == LeagueTab.weekly ? 'This Week' : 'All Time',
+                        tab == LeagueTab.weekly ? s.thisWeekTab : s.allTimeTab,
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: selected
@@ -95,16 +98,16 @@ class LeaderboardScreen extends ConsumerWidget {
   }
 
   Widget _buildList(
-      BuildContext context, List<AppUser> users, AppUser? currentUser) {
+      BuildContext context, AppStrings s, List<AppUser> users, AppUser? currentUser) {
     if (users.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('🏁', style: TextStyle(fontSize: 48)),
-            SizedBox(height: 12),
+            const Text('🏁', style: TextStyle(fontSize: 48)),
+            const SizedBox(height: 12),
             Text(
-              'No hunters yet!\nBe the first to report a spot.',
+              s.noHuntersYet,
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 16),
             ),
@@ -124,6 +127,7 @@ class LeaderboardScreen extends ConsumerWidget {
           user: user,
           rank: rank,
           isMe: isMe,
+          s: s,
         )
             .animate(delay: Duration(milliseconds: i * 60))
             .fadeIn(duration: 300.ms)
@@ -137,11 +141,13 @@ class _LeaderboardTile extends StatelessWidget {
   final AppUser user;
   final int rank;
   final bool isMe;
+  final AppStrings s;
 
   const _LeaderboardTile({
     required this.user,
     required this.rank,
     required this.isMe,
+    required this.s,
   });
 
   @override
@@ -190,8 +196,8 @@ class _LeaderboardTile extends StatelessWidget {
                   color: AppTheme.primaryColor,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text(
-                  'You',
+                child: Text(
+                  s.you,
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 10,
@@ -203,7 +209,7 @@ class _LeaderboardTile extends StatelessWidget {
           ],
         ),
         subtitle: Text(
-          'Level ${user.level} · ${user.totalReports} reports',
+          s.levelAndReports(user.level, user.totalReports),
           style: Theme.of(context)
               .textTheme
               .bodySmall
@@ -221,9 +227,9 @@ class _LeaderboardTile extends StatelessWidget {
                 color: _rankColor(rank),
               ),
             ),
-            const Text(
-              'pts',
-              style: TextStyle(fontSize: 11, color: Colors.grey),
+            Text(
+              s.pts,
+              style: const TextStyle(fontSize: 11, color: Colors.grey),
             ),
           ],
         ),

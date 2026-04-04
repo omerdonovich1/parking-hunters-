@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/l10n/app_strings.dart';
+import '../../../providers/locale_provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:percent_indicator/linear_percent_indicator.dart';
@@ -23,6 +25,7 @@ class ProfileScreen extends ConsumerWidget {
       return const Center(child: CircularProgressIndicator());
     }
 
+    final s = ref.watch(appStringsProvider);
     final levelProgress = gamService.getLevelProgress(user.points);
     final levelTitle = gamService.getLevelTitle(user.level);
     final pointsToNext = gamService.getPointsToNextLevel(user.points);
@@ -42,15 +45,15 @@ class ProfileScreen extends ConsumerWidget {
           _buildProfileHeader(context, user.displayName, user.photoUrl,
               levelTitle, user.level),
           const SizedBox(height: 20),
-          _buildPointsCard(context, user.points, levelProgress, pointsToNext, user.level),
+          _buildPointsCard(context, s, user.points, levelProgress, pointsToNext, user.level),
           const SizedBox(height: 16),
-          _buildStatsRow(context, user.totalReports, earnedBadges.length, user.level),
+          _buildStatsRow(context, s, user.totalReports, earnedBadges.length, user.level),
           const SizedBox(height: 12),
-          _buildStreakCard(context, user.currentStreak, user.longestStreak),
+          _buildStreakCard(context, s, user.currentStreak, user.longestStreak),
           const SizedBox(height: 24),
-          _buildBadgesSection(context, earnedBadges),
+          _buildBadgesSection(context, s, earnedBadges),
           const SizedBox(height: 24),
-          _buildLeagueSection(context),
+          _buildLeagueSection(context, s),
           const SizedBox(height: 24),
           OutlinedButton.icon(
             onPressed: () async {
@@ -58,7 +61,7 @@ class ProfileScreen extends ConsumerWidget {
               context.go('/auth');
             },
             icon: const Icon(Icons.logout, color: Colors.red),
-            label: const Text('Sign Out', style: TextStyle(color: Colors.red)),
+            label: Text(s.signOut, style: const TextStyle(color: Colors.red)),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Colors.red),
               shape: RoundedRectangleBorder(
@@ -138,6 +141,7 @@ class ProfileScreen extends ConsumerWidget {
 
   Widget _buildPointsCard(
     BuildContext context,
+    AppStrings s,
     int points,
     double levelProgress,
     int pointsToNext,
@@ -167,8 +171,8 @@ class ProfileScreen extends ConsumerWidget {
             const SizedBox(height: 12),
             Text(
               pointsToNext > 0
-                  ? '$pointsToNext points to next level'
-                  : 'Maximum level reached!',
+                  ? s.pointsToNextLevel(pointsToNext)
+                  : s.maximumLevel,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 8),
@@ -190,14 +194,14 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildStatsRow(BuildContext context, int totalReports, int badgesCount, int level) {
+  Widget _buildStatsRow(BuildContext context, AppStrings s, int totalReports, int badgesCount, int level) {
     return Row(
       children: [
-        _statCard(context, '📍', totalReports.toString(), 'Reports'),
+        _statCard(context, '📍', totalReports.toString(), s.reports),
         const SizedBox(width: 12),
-        _statCard(context, '🏅', badgesCount.toString(), 'Badges'),
+        _statCard(context, '🏅', badgesCount.toString(), s.badges),
         const SizedBox(width: 12),
-        _statCard(context, '⭐', level.toString(), 'Level'),
+        _statCard(context, '⭐', level.toString(), s.levelLabel),
       ],
     );
   }
@@ -229,7 +233,7 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildStreakCard(BuildContext context, int currentStreak, int longestStreak) {
+  Widget _buildStreakCard(BuildContext context, AppStrings s, int currentStreak, int longestStreak) {
     final isOnFire = currentStreak >= 3;
     return Card(
       child: Padding(
@@ -259,8 +263,8 @@ class ProfileScreen extends ConsumerWidget {
                 children: [
                   Text(
                     currentStreak == 0
-                        ? 'No active streak'
-                        : '$currentStreak-day streak!',
+                        ? s.noActiveStreak
+                        : s.dayStreakLabel(currentStreak),
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                           color: isOnFire ? Colors.orange : null,
@@ -268,7 +272,7 @@ class ProfileScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Best: $longestStreak day${longestStreak == 1 ? '' : 's'}  •  Report daily to keep your streak',
+                    s.bestStreakLabel(longestStreak),
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ],
@@ -301,7 +305,7 @@ class ProfileScreen extends ConsumerWidget {
     ).animate().fadeIn(delay: 200.ms);
   }
 
-  Widget _buildBadgesSection(BuildContext context, List<badge_model.Badge> earnedBadges) {
+  Widget _buildBadgesSection(BuildContext context, AppStrings s, List<badge_model.Badge> earnedBadges) {
     final earnedIds = earnedBadges.map((b) => b.id).toSet();
     final allBadges = badge_model.Badge.allBadges;
 
@@ -309,12 +313,12 @@ class ProfileScreen extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Badges',
+          s.badges,
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         const SizedBox(height: 4),
         Text(
-          '${earnedBadges.length}/${allBadges.length} earned',
+          s.earnedOf(earnedBadges.length, allBadges.length),
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 16),
@@ -398,7 +402,7 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildLeagueSection(BuildContext context) {
+  Widget _buildLeagueSection(BuildContext context, AppStrings s) {
     final mockLeague = [
       LeagueEntry(userId: '1', displayName: 'ParkingPro', points: 2400, rank: 1, weeklyPoints: 340),
       LeagueEntry(userId: '2', displayName: 'SpeedHunter', points: 1800, rank: 2, weeklyPoints: 280),
@@ -410,12 +414,12 @@ class ProfileScreen extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Weekly League',
+          s.weeklyLeague,
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         const SizedBox(height: 4),
         Text(
-          'Top hunters this week',
+          s.topHuntersThisWeek,
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 12),
@@ -464,14 +468,14 @@ class ProfileScreen extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            '+${leagueEntry.weeklyPoints} pts',
+                            s.weeklyPts(leagueEntry.weeklyPoints),
                             style: const TextStyle(
                               color: AppTheme.primaryColor,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           Text(
-                            'this week',
+                            s.thisWeekLabel,
                             style: Theme.of(context)
                                 .textTheme
                                 .bodyMedium

@@ -10,6 +10,8 @@ import '../../../services/location_service.dart';
 import '../../../services/ai_scan_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/l10n/app_strings.dart';
+import '../../../providers/locale_provider.dart';
 import 'widgets/success_animation.dart';
 
 class ReportScreen extends ConsumerStatefulWidget {
@@ -24,7 +26,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
   int _currentStep = 0;
   double? _lat;
   double? _lng;
-  String _address = 'Tap to detect location';
+  String _address = '';
   bool _isGettingLocation = false;
   bool _showSuccess = false;
   final LocationService _locationService = LocationService();
@@ -101,11 +103,12 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
       HapticFeedback.heavyImpact();
       setState(() => _showSuccess = true);
       if (s.newBadgeId != null) {
+        final str = ref.read(appStringsProvider);
         Future.delayed(const Duration(seconds: 3), () {
           if (mounted) {
             showToast(context,
               type: ToastType.warning,
-              title: 'Badge unlocked!',
+              title: str.badgeUnlocked,
               subtitle: s.newBadgeId!.replaceAll('_', ' '),
               duration: const Duration(seconds: 4),
             );
@@ -122,7 +125,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
       _currentStep = 0;
       _lat = null;
       _lng = null;
-      _address = 'Tap to detect location';
+      _address = '';
     });
     context.go('/');
   }
@@ -145,6 +148,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
   @override
   Widget build(BuildContext context) {
     final reportState = ref.watch(reportProvider);
+    final s = ref.watch(appStringsProvider);
     return Stack(
       children: [
         Scaffold(
@@ -152,11 +156,11 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
           body: SafeArea(
             child: Column(
               children: [
-                _buildHeader(),
+                _buildHeader(s),
                 _buildStepIndicator(),
                 const SizedBox(height: 8),
-                Expanded(child: _buildCurrentStep(reportState)),
-                _buildBottomBar(reportState),
+                Expanded(child: _buildCurrentStep(reportState, s)),
+                _buildBottomBar(reportState, s),
               ],
             ),
           ),
@@ -167,14 +171,9 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
     );
   }
 
-  Widget _buildHeader() {
-    const titles = ['Pin Location', 'Take Photo', 'AI Scan', 'Confirm'];
-    final subs = [
-      'Where is the free spot?',
-      'Photograph the parking space',
-      'Claude analyzes your photo',
-      'Submit your report',
-    ];
+  Widget _buildHeader(AppStrings s) {
+    final titles = [s.stepPinLocation, s.stepTakePhoto, s.stepAiScan, s.stepConfirm];
+    final subs = [s.stepSubWhere, s.stepSubPhoto, s.stepSubAi, s.stepSubConfirm];
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       child: Row(
@@ -282,24 +281,19 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
     );
   }
 
-  Widget _buildCurrentStep(ReportState reportState) {
+  Widget _buildCurrentStep(ReportState reportState, AppStrings s) {
     switch (_currentStep) {
-      case 0:
-        return _buildLocationStep();
-      case 1:
-        return _buildPhotoStep(reportState);
-      case 2:
-        return _buildScanStep(reportState);
-      case 3:
-        return _buildConfirmStep(reportState);
-      default:
-        return _buildLocationStep();
+      case 0:  return _buildLocationStep(s);
+      case 1:  return _buildPhotoStep(reportState, s);
+      case 2:  return _buildScanStep(reportState, s);
+      case 3:  return _buildConfirmStep(reportState, s);
+      default: return _buildLocationStep(s);
     }
   }
 
   // ── STEP 1: LOCATION ──────────────────────────────────────────────────────
 
-  Widget _buildLocationStep() {
+  Widget _buildLocationStep(AppStrings s) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -345,11 +339,11 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.map_outlined, color: Colors.white12, size: 48),
+                              const Icon(Icons.map_outlined, color: Colors.white12, size: 48),
                               const SizedBox(height: 8),
                               Text(
-                                'No location yet',
-                                style: TextStyle(color: Colors.white24, fontSize: 13),
+                                s.noLocationYet,
+                                style: const TextStyle(color: Colors.white24, fontSize: 13),
                               ),
                             ],
                           ),
@@ -366,7 +360,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        _address,
+                        _address.isEmpty ? s.tapToDetectLoc : _address,
                         style: TextStyle(
                           color: _lat != null ? Colors.white70 : Colors.white30,
                           fontSize: 13,
@@ -387,14 +381,14 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Row(
+                : Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.my_location, color: Colors.white, size: 18),
-                      SizedBox(width: 10),
+                      const Icon(Icons.my_location, color: Colors.white, size: 18),
+                      const SizedBox(width: 10),
                       Text(
-                        'Detect My Location',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
+                        s.detectMyLocation,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
                       ),
                     ],
                   ),
@@ -406,7 +400,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
 
   // ── STEP 2: PHOTO ─────────────────────────────────────────────────────────
 
-  Widget _buildPhotoStep(ReportState reportState) {
+  Widget _buildPhotoStep(ReportState reportState, AppStrings s) {
     final hasPhoto = reportState.selectedImagePath != null;
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -440,12 +434,12 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                     color: Colors.black54,
-                                    child: const Row(
+                                    child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.refresh, color: Colors.white, size: 14),
-                                        SizedBox(width: 4),
-                                        Text('Retake', style: TextStyle(color: Colors.white, fontSize: 12)),
+                                        const Icon(Icons.refresh, color: Colors.white, size: 14),
+                                        const SizedBox(width: 4),
+                                        Text(s.retake, style: const TextStyle(color: Colors.white, fontSize: 12)),
                                       ],
                                     ),
                                   ),
@@ -463,12 +457,12 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                                 color: AppTheme.neonGreen.withValues(alpha: 0.9),
                                 borderRadius: BorderRadius.circular(20),
                               ),
-                              child: const Row(
+                              child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.check_circle, color: Colors.white, size: 13),
-                                  SizedBox(width: 5),
-                                  Text('Photo ready', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                                  const Icon(Icons.check_circle, color: Colors.white, size: 13),
+                                  const SizedBox(width: 5),
+                                  Text(s.photoReady, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
                                 ],
                               ),
                             ),
@@ -492,14 +486,14 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                             ),
                           ),
                           const SizedBox(height: 16),
-                          const Text(
-                            'Photo required',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+                          Text(
+                            s.photoRequired,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'AI needs a photo to verify the spot',
-                            style: TextStyle(color: Colors.white38, fontSize: 13),
+                            s.aiNeedsPhoto,
+                            style: const TextStyle(color: Colors.white38, fontSize: 13),
                           ),
                         ],
                       ),
@@ -513,7 +507,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                 child: _GlassOutlinedButton(
                   onTap: () => ref.read(reportProvider.notifier).pickImage(fromCamera: false),
                   icon: Icons.photo_library_outlined,
-                  label: 'Gallery',
+                  label: s.gallery,
                 ),
               ),
               const SizedBox(width: 12),
@@ -521,12 +515,12 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                 flex: 2,
                 child: _OrangeButton(
                   onTap: () => ref.read(reportProvider.notifier).pickImage(fromCamera: true),
-                  child: const Row(
+                  child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.camera_alt, color: Colors.white, size: 18),
-                      SizedBox(width: 8),
-                      Text('Open Camera', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                      const Icon(Icons.camera_alt, color: Colors.white, size: 18),
+                      const SizedBox(width: 8),
+                      Text(s.openCamera, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
                     ],
                   ),
                 ),
@@ -540,7 +534,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
 
   // ── STEP 3: AI SCAN ───────────────────────────────────────────────────────
 
-  Widget _buildScanStep(ReportState reportState) {
+  Widget _buildScanStep(ReportState reportState, AppStrings s) {
     final hasResult = reportState.aiScanResult != null;
     final isScanning = reportState.isScanning;
     final result = reportState.aiScanResult;
@@ -566,7 +560,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                         fit: BoxFit.cover,
                       ),
                       if (isScanning) _buildScanOverlay(),
-                      if (hasResult) _buildResultOverlay(result!),
+                      if (hasResult) _buildResultOverlay(result!, s),
                     ],
                   ),
                 ),
@@ -578,17 +572,17 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
               onTap: () async {
                 await ref.read(reportProvider.notifier).scanWithAI();
               },
-              child: const Row(
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.auto_awesome, color: Colors.white, size: 18),
-                  SizedBox(width: 10),
-                  Text('Scan with AI', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                  const Icon(Icons.auto_awesome, color: Colors.white, size: 18),
+                  const SizedBox(width: 10),
+                  Text(s.scanWithAi, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
                 ],
               ),
             ),
           if (isScanning) const _ScanShimmerCard(),
-          if (hasResult) _buildResultCard(result!),
+          if (hasResult) _buildResultCard(result!, s),
           if (reportState.error != null && !isScanning) ...[
             const SizedBox(height: 8),
             _GlassCard(
@@ -604,7 +598,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                   ),
                   GestureDetector(
                     onTap: () => ref.read(reportProvider.notifier).scanWithAI(),
-                    child: const Text('Retry', style: TextStyle(color: AppTheme.orange, fontWeight: FontWeight.w700, fontSize: 13)),
+                    child: Text(s.retry, style: const TextStyle(color: AppTheme.orange, fontWeight: FontWeight.w700, fontSize: 13)),
                   ),
                 ],
               ),
@@ -645,7 +639,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
     );
   }
 
-  Widget _buildResultOverlay(AiScanResult result) {
+  Widget _buildResultOverlay(AiScanResult result, AppStrings s) {
     final color = result.isFree ? AppTheme.neonGreen : AppTheme.neonRed;
     return Positioned(
       bottom: 0,
@@ -670,7 +664,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        result.isFree ? 'Spot is FREE' : 'Spot is TAKEN',
+                        result.isFree ? s.spotIsFree : s.spotIsTakenLabel,
                         style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 15),
                       ),
                       Text(
@@ -701,7 +695,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
     );
   }
 
-  Widget _buildResultCard(AiScanResult result) {
+  Widget _buildResultCard(AiScanResult result, AppStrings s) {
     final isFree = result.isFree;
     final color = isFree ? AppTheme.neonGreen : AppTheme.neonRed;
     return _GlassCard(
@@ -713,7 +707,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
               Icon(isFree ? Icons.check_circle : Icons.cancel, color: color, size: 22),
               const SizedBox(width: 10),
               Text(
-                isFree ? 'Free spot confirmed' : 'Spot appears taken',
+                isFree ? s.freeSpotConfirmed : s.spotAppearsTaken,
                 style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 15),
               ),
               const Spacer(),
@@ -740,7 +734,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
 
   // ── STEP 4: CONFIRM & SUBMIT ──────────────────────────────────────────────
 
-  Widget _buildConfirmStep(ReportState reportState) {
+  Widget _buildConfirmStep(ReportState reportState, AppStrings s) {
     final result = reportState.aiScanResult;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -752,15 +746,15 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _summaryRow(Icons.location_on, 'Location', _address),
+                _summaryRow(Icons.location_on, s.locationLabel, _address.isEmpty ? s.tapToDetectLoc : _address),
                 const Divider(color: Colors.white10, height: 24),
-                _summaryRow(Icons.access_time, 'Expires in', '30 minutes'),
+                _summaryRow(Icons.access_time, s.expiresIn, s.thirtyMinutes),
                 if (result != null) ...[
                   const Divider(color: Colors.white10, height: 24),
                   _summaryRow(
                     Icons.auto_awesome,
-                    'AI Result',
-                    '${result.isFree ? "Free" : "Taken"} · ${result.confidence}% confidence',
+                    s.aiResult,
+                    '${result.isFree ? s.freeLabel : s.takenLabel} · ${result.confidence}% ${s.confidenceLabel}',
                   ),
                 ],
               ],
@@ -781,11 +775,11 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                   child: const Center(child: Text('🎯', style: TextStyle(fontSize: 22))),
                 ),
                 const SizedBox(width: 14),
-                const Column(
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('+10 Points', style: TextStyle(color: AppTheme.orange, fontWeight: FontWeight.w900, fontSize: 18)),
-                    Text('Thank you for helping the community!', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                    Text(s.plusTenPoints, style: const TextStyle(color: AppTheme.orange, fontWeight: FontWeight.w900, fontSize: 18)),
+                    Text(s.thanksForHelping, style: const TextStyle(color: Colors.white54, fontSize: 12)),
                   ],
                 ),
               ],
@@ -797,12 +791,12 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
           else
             _OrangeButton(
               onTap: _submitReport,
-              child: const Row(
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.send_rounded, color: Colors.white, size: 18),
-                  SizedBox(width: 10),
-                  Text('Submit Report', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                  const Icon(Icons.send_rounded, color: Colors.white, size: 18),
+                  const SizedBox(width: 10),
+                  Text(s.submitReport, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
                 ],
               ),
             ),
@@ -836,7 +830,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
 
   // ── BOTTOM NAV ────────────────────────────────────────────────────────────
 
-  Widget _buildBottomBar(ReportState reportState) {
+  Widget _buildBottomBar(ReportState reportState, AppStrings s) {
     final canNext = switch (_currentStep) {
       0 => _lat != null,
       1 => reportState.selectedImagePath != null,
@@ -851,7 +845,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
       child: _OrangeButton(
         onTap: canNext ? _nextStep : null,
         child: Text(
-          _currentStep == 2 ? 'Continue to Submit' : 'Continue',
+          _currentStep == 2 ? s.continueToSubmit : s.continue_,
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
         ),
       ),

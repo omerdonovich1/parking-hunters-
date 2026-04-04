@@ -6,6 +6,8 @@ import '../../../providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../providers/demo_provider.dart';
+import '../../../providers/locale_provider.dart';
+import '../../../core/l10n/app_strings.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -77,7 +79,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
       final user = await ref.read(authServiceProvider).signInWithGoogle();
       if (user != null && mounted) context.go('/');
     } catch (e) {
-      if (mounted) _showError('Google sign in failed');
+      if (mounted) _showError(ref.read(appStringsProvider).googleFailed);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -89,7 +91,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
       final user = await ref.read(authServiceProvider).signInWithApple();
       if (user != null && mounted) context.go('/');
     } catch (e) {
-      if (mounted) _showError('Apple sign in failed');
+      if (mounted) _showError(ref.read(appStringsProvider).appleFailed);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -101,6 +103,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
 
   @override
   Widget build(BuildContext context) {
+    final s = ref.watch(appStringsProvider);
     return Scaffold(
       backgroundColor: AppTheme.bg,
       body: Stack(
@@ -150,19 +153,19 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const SizedBox(height: 32),
-                    _buildLogo(),
+                    _buildLogo(s),
                     const SizedBox(height: 44),
-                    _buildSocialButtons(),
+                    _buildSocialButtons(s),
                     const SizedBox(height: 28),
-                    _buildDivider(),
+                    _buildDivider(s),
                     const SizedBox(height: 28),
-                    _buildEmailForm(),
+                    _buildEmailForm(s),
                     const SizedBox(height: 20),
-                    _buildSubmitButton(),
+                    _buildSubmitButton(s),
                     const SizedBox(height: 20),
-                    _buildToggleMode(),
+                    _buildToggleMode(s),
                     const SizedBox(height: 36),
-                    _buildDemoButton(),
+                    _buildDemoButton(s),
                   ],
                 ),
               ),
@@ -180,7 +183,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     );
   }
 
-  Widget _buildLogo() {
+  Widget _buildLogo(AppStrings s) {
     return Column(
       children: [
         Container(
@@ -206,9 +209,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
           ),
         ),
         const SizedBox(height: 18),
-        const Text(
-          'Parking Hunter',
-          style: TextStyle(
+        Text(
+          s.appName,
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 30,
             fontWeight: FontWeight.w900,
@@ -217,7 +220,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         ),
         const SizedBox(height: 6),
         Text(
-          'Hunt. Report. Earn Points.',
+          s.tagline,
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.45),
             fontSize: 14,
@@ -228,7 +231,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     );
   }
 
-  Widget _buildSocialButtons() {
+  Widget _buildSocialButtons(AppStrings s) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -256,9 +259,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
                 ),
               ),
               const SizedBox(width: 12),
-              const Text(
-                'Continue with Google',
-                style: TextStyle(
+              Text(
+                s.continueGoogle,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
@@ -270,14 +273,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         const SizedBox(height: 12),
         _GlassButton(
           onTap: _isLoading ? null : _handleAppleSignIn,
-          child: const Row(
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.apple, color: Colors.white, size: 22),
-              SizedBox(width: 10),
+              const Icon(Icons.apple, color: Colors.white, size: 22),
+              const SizedBox(width: 10),
               Text(
-                'Continue with Apple',
-                style: TextStyle(
+                s.continueApple,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
@@ -290,7 +293,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     );
   }
 
-  Widget _buildDivider() {
+  Widget _buildDivider(AppStrings s) {
     return Row(
       children: [
         Expanded(
@@ -299,7 +302,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
-            'or',
+            s.or_,
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.3),
               fontSize: 13,
@@ -313,7 +316,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     );
   }
 
-  Widget _buildEmailForm() {
+  Widget _buildEmailForm(AppStrings s) {
     return Form(
       key: _formKey,
       child: Column(
@@ -321,25 +324,25 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
           if (_isSignUp) ...[
             _DarkTextField(
               controller: _nameController,
-              hint: 'Display Name',
+              hint: s.displayName,
               icon: Icons.person_outline,
               validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Enter your name' : null,
+                  v == null || v.trim().isEmpty ? s.enterYourName : null,
             ),
             const SizedBox(height: 12),
           ],
           _DarkTextField(
             controller: _emailController,
-            hint: 'Email',
+            hint: s.email,
             icon: Icons.email_outlined,
             keyboardType: TextInputType.emailAddress,
             validator: (v) =>
-                v == null || !v.contains('@') ? 'Enter a valid email' : null,
+                v == null || !v.contains('@') ? s.enterValidEmail : null,
           ),
           const SizedBox(height: 12),
           _DarkTextField(
             controller: _passwordController,
-            hint: 'Password',
+            hint: s.password,
             icon: Icons.lock_outline,
             obscureText: _obscurePassword,
             suffixIcon: IconButton(
@@ -354,14 +357,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
                   setState(() => _obscurePassword = !_obscurePassword),
             ),
             validator: (v) =>
-                v == null || v.length < 6 ? 'Min 6 characters' : null,
+                v == null || v.length < 6 ? s.minSixChars : null,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSubmitButton() {
+  Widget _buildSubmitButton(AppStrings s) {
     return GestureDetector(
       onTap: _isLoading ? null : _handleEmailAuth,
       child: Container(
@@ -381,7 +384,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         ),
         child: Center(
           child: Text(
-            _isSignUp ? 'Create Account' : 'Sign In',
+            _isSignUp ? s.createAccount : s.signIn,
             style: const TextStyle(
               color: Colors.white,
               fontSize: 16,
@@ -394,12 +397,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     );
   }
 
-  Widget _buildToggleMode() {
+  Widget _buildToggleMode(AppStrings s) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
-          _isSignUp ? 'Already have an account? ' : "Don't have an account? ",
+          _isSignUp ? s.alreadyHaveAcct : s.noAccount,
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.4),
             fontSize: 13,
@@ -408,7 +411,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         GestureDetector(
           onTap: () => setState(() => _isSignUp = !_isSignUp),
           child: Text(
-            _isSignUp ? 'Sign In' : 'Sign Up',
+            _isSignUp ? s.signIn : s.signUp,
             style: const TextStyle(
               color: AppTheme.orange,
               fontWeight: FontWeight.w700,
@@ -420,11 +423,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     );
   }
 
-  Widget _buildDemoButton() {
+  Widget _buildDemoButton(AppStrings s) {
     return GestureDetector(
       onTap: () => ref.read(demoModeProvider.notifier).state = true,
       child: Text(
-        'Try Demo Mode — no login required',
+        s.tryDemoMode,
         textAlign: TextAlign.center,
         style: TextStyle(
           color: Colors.white.withValues(alpha: 0.2),

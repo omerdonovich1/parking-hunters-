@@ -12,6 +12,8 @@ import '../../../../providers/map_provider.dart';
 import '../../../../providers/auth_provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
+import '../../../../core/l10n/app_strings.dart';
+import '../../../../providers/locale_provider.dart';
 import 'spot_photo_viewer.dart';
 
 class SpotBottomSheet extends ConsumerStatefulWidget {
@@ -60,6 +62,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
 
   Future<void> _markAsTaken() async {
     if (_isMarkingTaken) return;
+    final s = ref.read(appStringsProvider);
     HapticFeedback.mediumImpact();
     setState(() => _isMarkingTaken = true);
 
@@ -86,8 +89,8 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
             setState(() => _isMarkingTaken = false);
             showToast(context,
               type: ToastType.warning,
-              title: 'Too far away',
-              subtitle: '${distance.toInt()}m — get within 50m to mark as taken',
+              title: s.tooFarAway,
+              subtitle: s.tooFarSubtitle(distance.toInt()),
             );
           }
           return;
@@ -102,8 +105,8 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
       if (context.mounted) {
         showToast(context,
           type: ToastType.info,
-          title: 'Spot marked as taken',
-          subtitle: 'Thanks for keeping the map accurate',
+          title: s.spotMarkedTaken,
+          subtitle: s.thanksAccurate,
         );
       }
     } catch (e) {
@@ -111,8 +114,8 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
         setState(() => _isMarkingTaken = false);
         showToast(context,
           type: ToastType.error,
-          title: 'Location unavailable',
-          subtitle: 'Make sure GPS is enabled',
+          title: s.locationUnavailable,
+          subtitle: s.makeGpsEnabled,
         );
       }
     }
@@ -120,6 +123,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
 
   Future<void> _iParkHere() async {
     if (_isParking) return;
+    final s = ref.read(appStringsProvider);
     HapticFeedback.heavyImpact();
     setState(() => _isParking = true);
 
@@ -145,8 +149,8 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
             setState(() => _isParking = false);
             showToast(context,
               type: ToastType.warning,
-              title: 'Drive to the spot first',
-              subtitle: '${distance.toInt()}m away — need to be within 50m',
+              title: s.driveToSpotFirst,
+              subtitle: s.driveSubtitle(distance.toInt()),
             );
           }
           return;
@@ -173,8 +177,8 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
         Navigator.pop(context);
         showToast(context,
           type: ToastType.success,
-          title: 'Enjoy your spot!',
-          subtitle: '+5 pts added to your account',
+          title: s.enjoySpot,
+          subtitle: s.ptsAdded,
           duration: const Duration(seconds: 4),
         );
       }
@@ -183,8 +187,8 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
         setState(() => _isParking = false);
         showToast(context,
           type: ToastType.error,
-          title: 'Location unavailable',
-          subtitle: 'Make sure GPS is enabled',
+          title: s.locationUnavailable,
+          subtitle: s.makeGpsEnabled,
         );
       }
     }
@@ -229,32 +233,13 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
     }
   }
 
-  String _statusLabel(SpotStatus status) {
+  String _statusLabel(SpotStatus status, AppStrings s) {
     switch (status) {
-      case SpotStatus.available:
-        return 'Available';
-      case SpotStatus.soonAvailable:
-        return 'Soon Available';
-      case SpotStatus.lowConfidence:
-        return 'Low Confidence';
-      case SpotStatus.taken:
-        return 'Taken';
+      case SpotStatus.available:       return s.statusAvailable;
+      case SpotStatus.soonAvailable:   return s.statusSoonAvailable;
+      case SpotStatus.lowConfidence:   return s.statusLowConfidence;
+      case SpotStatus.taken:           return s.statusTaken;
     }
-  }
-
-  String _timeAgo(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 1) return 'just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    return '${diff.inHours}h ago';
-  }
-
-  String _timeRemaining(DateTime expiresAt) {
-    final remaining = expiresAt.difference(DateTime.now());
-    if (remaining.isNegative) return 'Expired';
-    if (remaining.inSeconds < 60) return '${remaining.inSeconds}s left';
-    if (remaining.inMinutes < 60) return '${remaining.inMinutes}min left';
-    return '${remaining.inHours}h ${remaining.inMinutes % 60}m left';
   }
 
   Color _timeRemainingColor(DateTime expiresAt) {
@@ -267,6 +252,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final s = ref.watch(appStringsProvider);
     final spot = widget.spot;
     final statusColor = _statusColor(spot.computedStatus);
     final confidencePercent = (spot.confidence * 100).toInt();
@@ -333,7 +319,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                       ),
                       const SizedBox(width: 7),
                       Text(
-                        _statusLabel(spot.computedStatus),
+                        _statusLabel(spot.computedStatus, s),
                         style: TextStyle(color: statusColor, fontWeight: FontWeight.bold),
                       ),
                     ],
@@ -351,7 +337,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                       Icon(Icons.timer_outlined, size: 14, color: timeColor),
                       const SizedBox(width: 4),
                       Text(
-                        _timeRemaining(spot.expiresAt),
+                        s.timeRemaining(spot.expiresAt),
                         style: TextStyle(
                           color: timeColor,
                           fontWeight: FontWeight.w600,
@@ -379,7 +365,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'LIVE CONFIDENCE',
+                    s.liveConfidence,
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.35),
                       fontSize: 10,
@@ -404,7 +390,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
               children: [
                 Expanded(
                   child: _MiniStat(
-                    label: 'AI Scan',
+                    label: s.aiScan,
                     value: '$aiPercent%',
                     icon: Icons.auto_awesome,
                     color: AppTheme.orange,
@@ -413,8 +399,8 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: _MiniStat(
-                    label: 'Time Factor',
-                    value: _timeRemaining(spot.expiresAt),
+                    label: s.timeFactor,
+                    value: s.timeRemaining(spot.expiresAt),
                     icon: Icons.timer_outlined,
                     color: timeColor,
                   ),
@@ -427,7 +413,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                 Icon(Icons.access_time, size: 16, color: Colors.white30),
                 const SizedBox(width: 6),
                 Text(
-                  'Reported ${_timeAgo(spot.reportedAt)}',
+                  s.reported(spot.reportedAt),
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
@@ -464,14 +450,14 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                         color: Colors.black54,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.zoom_in, color: Colors.white, size: 14),
-                          SizedBox(width: 4),
+                          const Icon(Icons.zoom_in, color: Colors.white, size: 14),
+                          const SizedBox(width: 4),
                           Text(
-                            'Tap to expand',
-                            style: TextStyle(
+                            s.tapToExpand,
+                            style: const TextStyle(
                                 color: Colors.white, fontSize: 11),
                           ),
                         ],
@@ -487,9 +473,9 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
               child: ElevatedButton.icon(
                 onPressed: _navigateToSpot,
                 icon: const Icon(Icons.navigation_outlined),
-                label: const Text(
-                  'Navigate',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                label: Text(
+                  s.navigate,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.orange,
@@ -517,7 +503,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                       )
                     : const Text('🎉', style: TextStyle(fontSize: 18)),
                 label: Text(
-                  _isParking ? 'Checking location...' : 'I Parked Here!  +5 pts',
+                  _isParking ? s.checkingLocation : s.iParkHere,
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
@@ -545,7 +531,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
                     : const Icon(Icons.no_meeting_room_outlined),
-                label: Text(_isMarkingTaken ? 'Checking location...' : 'Mark as Taken'),
+                label: Text(_isMarkingTaken ? s.checkingLocation : s.markAsTaken),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blueGrey,
                   foregroundColor: Colors.white,
@@ -577,14 +563,14 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                       if (context.mounted) {
                         showToast(context,
                           type: ToastType.warning,
-                          title: 'Spot reported as gone',
-                          subtitle: 'Confidence score lowered',
+                          title: s.spotReportedGone,
+                          subtitle: s.confidenceLowered,
                         );
                       }
                     },
                     icon: const Icon(Icons.thumb_down_outlined, color: Colors.red),
-                    label: const Text('Not There',
-                        style: TextStyle(color: Colors.red)),
+                    label: Text(s.notThere,
+                        style: const TextStyle(color: Colors.red)),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Colors.red),
                       shape: RoundedRectangleBorder(
@@ -611,13 +597,13 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                       if (context.mounted) {
                         showToast(context,
                           type: ToastType.success,
-                          title: 'Spot confirmed!',
-                          subtitle: '+5 pts — thanks for the intel',
+                          title: s.spotConfirmed,
+                          subtitle: s.ptsThanksIntel,
                         );
                       }
                     },
                     icon: const Icon(Icons.thumb_up_outlined),
-                    label: const Text('Still Free'),
+                    label: Text(s.stillFree),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.secondaryColor,
                       shape: RoundedRectangleBorder(
