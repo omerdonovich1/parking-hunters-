@@ -121,8 +121,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   void _startLocationTracking() {
+    debugPrint('🔄 Starting location tracking...');
     _locationSubscription = _locationService.getPositionStream().listen(
       (position) {
+        debugPrint('📍 NEW LOCATION: lat=${position.latitude}, lng=${position.longitude}');
         final newLatLng = LatLng(position.latitude, position.longitude);
 
         if (mounted) {
@@ -132,6 +134,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
           // Move map to follow user (smooth pan)
           _mapController.move(newLatLng, _mapController.camera.zoom);
+          debugPrint('🗺️ Map moved to new location');
 
           // Reload nearby spots (uses debounce from _onMapPanned)
           _onMapPanned(position.latitude, position.longitude);
@@ -143,7 +146,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         }
       },
       onError: (e) {
-        debugPrint('❌ Location tracking error: $e');
+        debugPrint('❌ Location tracking error: $e (type: ${e.runtimeType})');
       },
     );
   }
