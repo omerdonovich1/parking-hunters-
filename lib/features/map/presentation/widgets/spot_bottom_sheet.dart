@@ -11,6 +11,7 @@ import '../../../../models/parking_spot_model.dart';
 import '../../../../providers/map_provider.dart';
 import '../../../../providers/auth_provider.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_toast.dart';
 import 'spot_photo_viewer.dart';
 
 class SpotBottomSheet extends ConsumerStatefulWidget {
@@ -83,14 +84,10 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
         if (distance > _maxRadiusMeters) {
           if (mounted) {
             setState(() => _isMarkingTaken = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'You\'re ${distance.toInt()}m away — get within 50m of the spot to mark it as taken.',
-                ),
-                backgroundColor: Colors.red.shade700,
-                behavior: SnackBarBehavior.floating,
-              ),
+            showToast(context,
+              type: ToastType.warning,
+              title: 'Too far away',
+              subtitle: '${distance.toInt()}m — get within 50m to mark as taken',
             );
           }
           return;
@@ -103,22 +100,19 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
       ref.read(parkingSpotsProvider.notifier).removeExpiredSpots();
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🅿️ Spot marked as taken — thanks!'),
-            backgroundColor: Colors.blueGrey,
-          ),
+        showToast(context,
+          type: ToastType.info,
+          title: 'Spot marked as taken',
+          subtitle: 'Thanks for keeping the map accurate',
         );
       }
     } catch (e) {
-      // If location fetch fails, block the action
       if (mounted) {
         setState(() => _isMarkingTaken = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not get your location. Make sure GPS is on.'),
-            backgroundColor: Colors.red,
-          ),
+        showToast(context,
+          type: ToastType.error,
+          title: 'Location unavailable',
+          subtitle: 'Make sure GPS is enabled',
         );
       }
     }
@@ -149,14 +143,10 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
         if (distance > _maxRadiusMeters) {
           if (mounted) {
             setState(() => _isParking = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'You\'re ${distance.toInt()}m away — drive to the spot first!',
-                ),
-                backgroundColor: Colors.orange.shade800,
-                behavior: SnackBarBehavior.floating,
-              ),
+            showToast(context,
+              type: ToastType.warning,
+              title: 'Drive to the spot first',
+              subtitle: '${distance.toInt()}m away — need to be within 50m',
             );
           }
           return;
@@ -181,29 +171,20 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Text('🎉 Enjoy your spot! ', style: TextStyle(fontSize: 15)),
-                Text('+5 pts', style: TextStyle(color: Color(0xFF00E676), fontWeight: FontWeight.bold, fontSize: 15)),
-              ],
-            ),
-            backgroundColor: const Color(0xFF1B5E20),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            duration: const Duration(seconds: 3),
-          ),
+        showToast(context,
+          type: ToastType.success,
+          title: 'Enjoy your spot!',
+          subtitle: '+5 pts added to your account',
+          duration: const Duration(seconds: 4),
         );
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isParking = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not get your location. Make sure GPS is on.'),
-            backgroundColor: Colors.red,
-          ),
+        showToast(context,
+          type: ToastType.error,
+          title: 'Location unavailable',
+          subtitle: 'Make sure GPS is enabled',
         );
       }
     }
@@ -563,8 +544,10 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                           );
                       Navigator.pop(context);
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Spot denied')),
+                        showToast(context,
+                          type: ToastType.warning,
+                          title: 'Spot reported as gone',
+                          subtitle: 'Confidence score lowered',
                         );
                       }
                     },
@@ -595,11 +578,10 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                           );
                       Navigator.pop(context);
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('✅ Spot confirmed! +5 points'),
-                            backgroundColor: AppTheme.secondaryColor,
-                          ),
+                        showToast(context,
+                          type: ToastType.success,
+                          title: 'Spot confirmed!',
+                          subtitle: '+5 pts — thanks for the intel',
                         );
                       }
                     },

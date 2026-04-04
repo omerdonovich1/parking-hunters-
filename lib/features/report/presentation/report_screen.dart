@@ -9,6 +9,7 @@ import '../../../providers/report_provider.dart';
 import '../../../services/location_service.dart';
 import '../../../services/ai_scan_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_toast.dart';
 import 'widgets/success_animation.dart';
 
 class ReportScreen extends ConsumerStatefulWidget {
@@ -102,13 +103,11 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
       if (s.newBadgeId != null) {
         Future.delayed(const Duration(seconds: 3), () {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('🏅 Badge unlocked: ${s.newBadgeId!.replaceAll('_', ' ')}!'),
-                backgroundColor: AppTheme.neonYellow,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
+            showToast(context,
+              type: ToastType.warning,
+              title: 'Badge unlocked!',
+              subtitle: s.newBadgeId!.replaceAll('_', ' '),
+              duration: const Duration(seconds: 4),
             );
           }
         });
