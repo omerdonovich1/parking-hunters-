@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:percent_indicator/linear_percent_indicator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../models/parking_spot_model.dart';
@@ -20,6 +22,9 @@ class SpotBottomSheet extends ConsumerStatefulWidget {
 
 class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
   Timer? _countdownTimer;
+  bool _isMarkingTaken = false;
+
+  static const double _maxRadiusMeters = 50.0;
 
   @override
   void initState() {
@@ -33,6 +38,85 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
   void dispose() {
     _countdownTimer?.cancel();
     super.dispose();
+  }
+
+  /// Haversine distance in meters between two lat/lng points.
+  double _distanceMeters(double lat1, double lng1, double lat2, double lng2) {
+    const r = 6371000.0;
+    final dLat = (lat2 - lat1) * math.pi / 180;
+    final dLng = (lng2 - lng1) * math.pi / 180;
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1 * math.pi / 180) *
+            math.cos(lat2 * math.pi / 180) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+
+  Future<void> _markAsTaken() async {
+    if (_isMarkingTaken) return;
+    setState(() => _isMarkingTaken = true);
+
+    try {
+      // Web doesn't support Geolocator — skip proximity check
+      if (!kIsWeb) {
+        final permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied ||
+            permission == LocationPermission.deniedForever) {
+          await Geolocator.requestPermission();
+        }
+
+        final position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        ).timeout(const Duration(seconds: 8));
+
+        final distance = _distanceMeters(
+          position.latitude, position.longitude,
+          widget.spot.lat, widget.spot.lng,
+        );
+
+        if (distance > _maxRadiusMeters) {
+          if (mounted) {
+            setState(() => _isMarkingTaken = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'You\'re ${distance.toInt()}m away — get within 50m of the spot to mark it as taken.',
+                ),
+                backgroundColor: Colors.red.shade700,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      // Within range — mark as taken
+      Navigator.pop(context);
+      await ref.read(firestoreServiceProvider).markSpotTaken(widget.spot.id);
+      ref.read(parkingSpotsProvider.notifier).removeExpiredSpots();
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🅿️ Spot marked as taken — thanks!'),
+            backgroundColor: Colors.blueGrey,
+          ),
+        );
+      }
+    } catch (e) {
+      // If location fetch fails, block the action
+      if (mounted) {
+        setState(() => _isMarkingTaken = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not get your location. Make sure GPS is on.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _navigateToSpot() async {
@@ -311,29 +395,19 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
               ),
             ),
             const SizedBox(height: 24),
-            // Mark as Taken — full width prominent button
+            // Mark as Taken — only allowed within 50m
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  await ref
-                      .read(firestoreServiceProvider)
-                      .markSpotTaken(spot.id);
-                  ref
-                      .read(parkingSpotsProvider.notifier)
-                      .removeExpiredSpots();
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('🅿️ Spot marked as taken — thanks!'),
-                        backgroundColor: Colors.blueGrey,
-                      ),
-                    );
-                  }
-                },
-                icon: const Icon(Icons.no_meeting_room_outlined),
-                label: const Text('Mark as Taken'),
+                onPressed: _isMarkingTaken ? null : _markAsTaken,
+                icon: _isMarkingTaken
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.no_meeting_room_outlined),
+                label: Text(_isMarkingTaken ? 'Checking location...' : 'Mark as Taken'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blueGrey,
                   foregroundColor: Colors.white,
