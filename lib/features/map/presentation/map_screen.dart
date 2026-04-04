@@ -163,14 +163,51 @@ class _MapScreenState extends ConsumerState<MapScreen>
               },
             ),
             children: [
-              // Dark-styled OSM tiles
+              // ── Base tiles: roads only, no POI clutter ────────────────────
               TileLayer(
-                urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
                 subdomains: const ['a', 'b', 'c', 'd'],
                 userAgentPackageName: 'com.example.parking_hunter',
                 retinaMode: true,
               ),
-              // Parking spot markers — clustered by zoom level
+              // ── Labels overlay: street names only ─────────────────────────
+              TileLayer(
+                urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
+                subdomains: const ['a', 'b', 'c', 'd'],
+                userAgentPackageName: 'com.example.parking_hunter',
+                retinaMode: true,
+              ),
+              // ── Radar rings around user's position ───────────────────────
+              if (!_isLoadingLocation)
+                CircleLayer(
+                  circles: [
+                    CircleMarker(
+                      point: _currentPosition,
+                      radius: 120,
+                      useRadiusInMeter: true,
+                      color: AppTheme.orange.withValues(alpha: 0.04),
+                      borderStrokeWidth: 1.5,
+                      borderColor: AppTheme.orange.withValues(alpha: 0.2),
+                    ),
+                    CircleMarker(
+                      point: _currentPosition,
+                      radius: 280,
+                      useRadiusInMeter: true,
+                      color: Colors.transparent,
+                      borderStrokeWidth: 1,
+                      borderColor: AppTheme.orange.withValues(alpha: 0.1),
+                    ),
+                    CircleMarker(
+                      point: _currentPosition,
+                      radius: 500,
+                      useRadiusInMeter: true,
+                      color: Colors.transparent,
+                      borderStrokeWidth: 0.8,
+                      borderColor: AppTheme.orange.withValues(alpha: 0.05),
+                    ),
+                  ],
+                ),
+              // ── Parking spot markers — clustered by zoom level ────────────
               MarkerLayer(
                 markers: _buildClusters(visible, _currentZoom).map((cluster) {
                   if (cluster.spots.length == 1) {
@@ -216,6 +253,24 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   ],
                 ),
             ],
+          ),
+
+          // ── Edge vignette — pulls focus to center, darkens corners ──────────
+          IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment.center,
+                  radius: 1.1,
+                  colors: [
+                    Colors.transparent,
+                    AppTheme.bg.withValues(alpha: 0.55),
+                  ],
+                  stops: const [0.55, 1.0],
+                ),
+              ),
+              child: const SizedBox.expand(),
+            ),
           ),
 
           // ── Top: blurred search bar ────────────────────────────────────────
