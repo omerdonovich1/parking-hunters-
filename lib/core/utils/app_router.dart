@@ -83,6 +83,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const MapScreen(),
           ),
           GoRoute(
+            path: '/map',
+            builder: (_, __) => const MapScreen(),
+          ),
+          GoRoute(
             path: '/report',
             builder: (_, __) => const ReportScreen(),
           ),

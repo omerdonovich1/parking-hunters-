@@ -356,8 +356,8 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                           .denySpot(spot.id, 'local_user');
                       ref.read(parkingSpotsProvider.notifier).updateSpot(
                             spot.copyWith(
-                              confidence:
-                                  (spot.confidence - 0.1).clamp(0.0, 1.0),
+                              aiConfidence:
+                                  (spot.aiConfidence - 0.1).clamp(0.0, 1.0),
                             ),
                           );
                       Navigator.pop(context);
@@ -387,8 +387,8 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                           .confirmSpot(spot.id, 'local_user');
                       ref.read(parkingSpotsProvider.notifier).updateSpot(
                             spot.copyWith(
-                              confidence:
-                                  (spot.confidence + 0.1).clamp(0.0, 1.0),
+                              aiConfidence:
+                                  (spot.aiConfidence + 0.1).clamp(0.0, 1.0),
                             ),
                           );
                       Navigator.pop(context);

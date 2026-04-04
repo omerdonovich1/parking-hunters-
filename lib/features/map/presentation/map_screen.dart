@@ -60,9 +60,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         _isLoadingLocation = false;
       });
       _mapController.move(latlng, 15);
-      ref.read(parkingSpotsProvider.notifier)
-          .loadNearbySpots(position.latitude, position.longitude,
-              radiusKm: ref.read(nearbyRadiusProvider));
+      // Firestore stream auto-loads all active spots — no manual fetch needed.
     } catch (e) {
       if (mounted) setState(() => _isLoadingLocation = false);
     }
@@ -123,7 +121,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               // Parking spot markers
               MarkerLayer(
                 markers: visible.map((spot) {
-                  final color = _spotColor(spot.status);
+                  final color = _spotColor(spot.computedStatus);
                   return Marker(
                     point: LatLng(spot.lat, spot.lng),
                     width: 80,
