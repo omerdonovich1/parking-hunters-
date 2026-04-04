@@ -27,13 +27,20 @@ class ParkingSpotsNotifier extends StateNotifier<List<ParkingSpot>> {
   void _subscribeToFirestore() {
     _spotsSubscription?.cancel();
     _spotsSubscription = _firestoreService.watchActiveSpots().listen(
-      (spots) {
-        state = spots;
-        debugPrint('Live spots from Firestore: ${spots.length}');
+      (firestoreSpots) {
+        if (firestoreSpots.isEmpty && state.isNotEmpty) {
+          // Keep any locally-added spots (e.g. just submitted) while Firestore catches up
+          final localOnly = state.where((s) => s.id.startsWith('demo_')).toList();
+          state = [...firestoreSpots, ...localOnly];
+        } else {
+          state = firestoreSpots;
+        }
+        debugPrint('Live spots from Firestore: ${firestoreSpots.length}');
       },
       onError: (e) {
-        debugPrint('watchActiveSpots error — falling back to demo spots: $e');
-        _loadDemoSpots();
+        debugPrint('watchActiveSpots error: $e');
+        // Don't wipe existing spots on error — keep showing what we have
+        if (state.isEmpty) _loadDemoSpots();
       },
     );
   }

@@ -39,16 +39,18 @@ class FirestoreService {
     }
   }
 
-  /// Real-time stream of all active spots (not taken, not expired).
+  /// Real-time stream of all active spots.
+  /// Single-field query (no composite index needed).
+  /// Taken spots and expired spots are filtered client-side.
   Stream<List<ParkingSpot>> watchActiveSpots() {
     try {
       return _db
           .collection(Constants.spotsCollection)
-          .where('status', isNotEqualTo: 'taken')
           .where('expiresAt', isGreaterThan: Timestamp.now())
           .snapshots()
           .map((snap) => snap.docs
               .map((d) => ParkingSpot.fromMap(d.data(), docId: d.id))
+              .where((spot) => spot.status != SpotStatus.taken)
               .toList());
     } catch (e) {
       debugPrint('watchActiveSpots error: $e');
