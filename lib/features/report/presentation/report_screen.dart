@@ -92,6 +92,12 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
     );
     final s = ref.read(reportProvider);
     if (s.isSuccess && mounted) {
+      // 3-beat rising pattern: light → medium → heavy
+      HapticFeedback.lightImpact();
+      await Future.delayed(const Duration(milliseconds: 80));
+      HapticFeedback.mediumImpact();
+      await Future.delayed(const Duration(milliseconds: 80));
+      HapticFeedback.heavyImpact();
       setState(() => _showSuccess = true);
       if (s.newBadgeId != null) {
         Future.delayed(const Duration(seconds: 3), () {

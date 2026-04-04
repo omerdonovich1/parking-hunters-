@@ -127,7 +127,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
       _mapController.move(LatLng(latAnim.value, lngAnim.value), zoomAnim.value);
     });
     _flyController!.addStatusListener((s) {
-      if (s == AnimationStatus.completed || s == AnimationStatus.dismissed) {
+      if (s == AnimationStatus.completed) {
+        HapticFeedback.lightImpact(); // landing click
+        _flyController?.dispose();
+        _flyController = null;
+      } else if (s == AnimationStatus.dismissed) {
         _flyController?.dispose();
         _flyController = null;
       }
@@ -179,6 +183,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Tick when a new spot appears live on the map
+    ref.listen<List<ParkingSpot>>(parkingSpotsProvider, (prev, next) {
+      if (prev != null && next.length > prev.length) {
+        HapticFeedback.selectionClick();
+      }
+    });
+
     final spots = ref.watch(parkingSpotsProvider);
     final activeFilters = ref.watch(activeFiltersProvider);
     final visible = spots.where((s) => !s.isExpired && activeFilters.contains(s.status)).toList();

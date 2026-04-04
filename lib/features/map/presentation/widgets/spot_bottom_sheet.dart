@@ -174,6 +174,11 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
 
       ref.read(parkingSpotsProvider.notifier).removeExpiredSpots();
 
+      // Double-thump — "confirmed" pattern like Uber ride match
+      HapticFeedback.heavyImpact();
+      await Future.delayed(const Duration(milliseconds: 110));
+      HapticFeedback.heavyImpact();
+
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
