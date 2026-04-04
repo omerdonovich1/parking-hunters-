@@ -96,6 +96,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
+  void _onMapPanned(double lat, double lng) {
+    // Only reload if map center moved significantly (>0.5 km)
+    final distance = _currentPosition.distanceTo(LatLng(lat, lng));
+    const threshold = 0.005; // ~0.5 km in degrees
+    if (distance > threshold) {
+      setState(() => _currentPosition = LatLng(lat, lng));
+      ref.read(parkingSpotsProvider.notifier)
+          .loadNearbySpots(lat, lng,
+              radiusKm: ref.read(nearbyRadiusProvider));
+    }
+  }
+
   Color _spotColor(SpotStatus s) {
     switch (s) {
       case SpotStatus.available:     return AppTheme.neonGreen;
@@ -139,6 +151,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
               initialZoom: 15,
               maxZoom: 19,
               minZoom: 10,
+              onPositionChanged: (MapPosition pos, bool hasGesture) {
+                if (hasGesture && pos.center != null) {
+                  _onMapPanned(pos.center!.latitude, pos.center!.longitude);
+                }
+              },
             ),
             children: [
               // Dark-styled OSM tiles
