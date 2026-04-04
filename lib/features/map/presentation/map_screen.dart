@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -12,6 +13,50 @@ import '../../../core/utils/constants.dart';
 import '../../../core/theme/app_theme.dart';
 import 'widgets/spot_bottom_sheet.dart';
 import 'widgets/map_filter_bar.dart';
+
+// ── Cluster model ────────────────────────────────────────────────────────────
+class _Cluster {
+  final List<ParkingSpot> spots;
+  _Cluster(this.spots);
+
+  LatLng get center {
+    final lat = spots.map((s) => s.lat).reduce((a, b) => a + b) / spots.length;
+    final lng = spots.map((s) => s.lng).reduce((a, b) => a + b) / spots.length;
+    return LatLng(lat, lng);
+  }
+
+  // Dominant color = most common status
+  SpotStatus get dominantStatus {
+    final counts = <SpotStatus, int>{};
+    for (final s in spots) {
+      counts[s.computedStatus] = (counts[s.computedStatus] ?? 0) + 1;
+    }
+    return counts.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+  }
+}
+
+/// Groups spots into clusters. Radius shrinks as zoom increases.
+List<_Cluster> _buildClusters(List<ParkingSpot> spots, double zoom) {
+  // At zoom 15+ show individual markers (cluster radius effectively 0)
+  final radiusDeg = zoom >= 15 ? 0.0 : 0.003 * math.pow(2, 14 - zoom);
+  final clusters = <_Cluster>[];
+
+  for (final spot in spots) {
+    bool merged = false;
+    for (final cluster in clusters) {
+      final c = cluster.center;
+      final dlat = (spot.lat - c.latitude).abs();
+      final dlng = (spot.lng - c.longitude).abs();
+      if (dlat < radiusDeg && dlng < radiusDeg) {
+        cluster.spots.add(spot);
+        merged = true;
+        break;
+      }
+    }
+    if (!merged) clusters.add(_Cluster([spot]));
+  }
+  return clusters;
+}
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -30,6 +75,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
   bool _hunterModeOpen = false;
+  double _currentZoom = 15;
 
   late AnimationController _pulseController;
 
@@ -109,6 +155,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
               initialZoom: 15,
               maxZoom: 19,
               minZoom: 10,
+              onPositionChanged: (pos, _) {
+                if (pos.zoom != null && pos.zoom != _currentZoom) {
+                  setState(() => _currentZoom = pos.zoom!);
+                }
+              },
             ),
             children: [
               // Dark-styled OSM tiles
@@ -118,23 +169,37 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 userAgentPackageName: 'com.example.parking_hunter',
                 retinaMode: true,
               ),
-              // Parking spot markers
+              // Parking spot markers — clustered by zoom level
               MarkerLayer(
-                markers: visible.map((spot) {
-                  final color = _spotColor(spot.computedStatus);
-                  return Marker(
-                    point: LatLng(spot.lat, spot.lng),
-                    width: 80,
-                    height: 56,
-                    child: GestureDetector(
-                      onTap: () => _showSpotSheet(spot),
-                      child: _SpotMarker(
-                        spot: spot,
-                        color: color,
-                        timeAgo: _timeAgo(spot.reportedAt),
+                markers: _buildClusters(visible, _currentZoom).map((cluster) {
+                  if (cluster.spots.length == 1) {
+                    final spot = cluster.spots.first;
+                    final color = _spotColor(spot.computedStatus);
+                    return Marker(
+                      point: LatLng(spot.lat, spot.lng),
+                      width: 80,
+                      height: 56,
+                      child: GestureDetector(
+                        onTap: () => _showSpotSheet(spot),
+                        child: _SpotMarker(
+                          spot: spot,
+                          color: color,
+                          timeAgo: _timeAgo(spot.reportedAt),
+                        ),
                       ),
-                    ),
-                  );
+                    );
+                  } else {
+                    final color = _spotColor(cluster.dominantStatus);
+                    return Marker(
+                      point: cluster.center,
+                      width: 56,
+                      height: 56,
+                      child: GestureDetector(
+                        onTap: () => _mapController.move(cluster.center, _currentZoom + 2),
+                        child: _ClusterMarker(count: cluster.spots.length, color: color),
+                      ),
+                    );
+                  }
                 }).toList(),
               ),
               // Current location dot
@@ -253,6 +318,42 @@ class _MapScreenState extends ConsumerState<MapScreen>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => SpotBottomSheet(spot: spot),
+    );
+  }
+}
+
+// ── Cluster marker ───────────────────────────────────────────────────────────
+class _ClusterMarker extends StatelessWidget {
+  final int count;
+  final Color color;
+  const _ClusterMarker({required this.count, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color.withValues(alpha: 0.2),
+        border: Border.all(color: color.withValues(alpha: 0.7), width: 2),
+        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 14)],
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$count',
+              style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w900),
+            ),
+            Text(
+              '🅿️',
+              style: const TextStyle(fontSize: 10),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
