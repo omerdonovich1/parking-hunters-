@@ -178,8 +178,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     final color = _spotColor(spot.computedStatus);
                     return Marker(
                       point: LatLng(spot.lat, spot.lng),
-                      width: 80,
-                      height: 56,
+                      width: 68,
+                      height: 76,
                       child: GestureDetector(
                         onTap: () { HapticFeedback.selectionClick(); _showSpotSheet(spot); },
                         child: _SpotMarker(
@@ -256,7 +256,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   _HunterSideButton(
                     onTap: () => context.go('/report'),
                   ).animate(onPlay: (c) => c.repeat(reverse: true))
-                      .scaleXY(begin: 1.0, end: 1.06, duration: 1200.ms, curve: Curves.easeInOut),
+                      .scaleXY(begin: 1.0, end: 1.1, duration: 1000.ms, curve: Curves.easeInOut),
                   const SizedBox(height: 16),
                   _SideIconButton(
                     icon: Icons.my_location_rounded,
@@ -333,7 +333,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 }
 
-// ── Cluster marker ───────────────────────────────────────────────────────────
+// ── Cluster marker — radar sweep style ──────────────────────────────────────
 class _ClusterMarker extends StatelessWidget {
   final int count;
   final Color color;
@@ -341,35 +341,49 @@ class _ClusterMarker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 52,
-      height: 52,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: color.withValues(alpha: 0.2),
-        border: Border.all(color: color.withValues(alpha: 0.7), width: 2),
-        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 14)],
-      ),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '$count',
-              style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w900),
-            ),
-            Text(
-              '🅿️',
-              style: const TextStyle(fontSize: 10),
-            ),
-          ],
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // Outer glow ring
+        Container(
+          width: 58,
+          height: 58,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: color.withValues(alpha: 0.06),
+            border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
+          ),
         ),
-      ),
+        // Inner filled circle
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: color.withValues(alpha: 0.14),
+            border: Border.all(color: color, width: 2),
+            boxShadow: [
+              BoxShadow(color: color.withValues(alpha: 0.7), blurRadius: 20, spreadRadius: 3),
+              BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 40, spreadRadius: 6),
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '$count',
+                style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w900, height: 1.1),
+              ),
+              Text('🅿️', style: const TextStyle(fontSize: 9)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
 
-// ── Premium spot marker ──────────────────────────────────────────────────────
+// ── Spot marker — radar blip HUD ─────────────────────────────────────────────
 class _SpotMarker extends StatelessWidget {
   final ParkingSpot spot;
   final Color color;
@@ -383,26 +397,61 @@ class _SpotMarker extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: color.withValues(alpha: 0.6), width: 1.5),
-            boxShadow: [BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 12)],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(conf, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w900)),
-              Text(timeAgo, style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 9, fontWeight: FontWeight.w600)),
-            ],
-          ),
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            // Outer pulse ring
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withValues(alpha: 0.05),
+                border: Border.all(color: color.withValues(alpha: 0.25), width: 1),
+              ),
+            ),
+            // Main blip circle
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withValues(alpha: 0.12),
+                border: Border.all(color: color, width: 2.5),
+                boxShadow: [
+                  BoxShadow(color: color.withValues(alpha: 0.75), blurRadius: 18, spreadRadius: 3),
+                  BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 36, spreadRadius: 6),
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    conf,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      height: 1.1,
+                    ),
+                  ),
+                  Text(
+                    timeAgo,
+                    style: TextStyle(
+                      color: color.withValues(alpha: 0.75),
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         // Pointer tip
         CustomPaint(
-          size: const Size(10, 6),
-          painter: _TipPainter(color: color.withValues(alpha: 0.6)),
+          size: const Size(10, 7),
+          painter: _TipPainter(color: color),
         ),
       ],
     );
@@ -617,7 +666,7 @@ class _GlassFilterBar extends ConsumerWidget {
   }
 }
 
-// ── Side Hunter button ───────────────────────────────────────────────────────
+// ── Side Hunter button — mission-critical CTA ────────────────────────────────
 class _HunterSideButton extends StatelessWidget {
   final VoidCallback onTap;
   const _HunterSideButton({required this.onTap});
@@ -627,20 +676,22 @@ class _HunterSideButton extends StatelessWidget {
     return GestureDetector(
       onTap: () { HapticFeedback.heavyImpact(); onTap(); },
       child: Container(
-        width: 52,
-        height: 52,
+        width: 60,
+        height: 60,
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [AppTheme.orange, Color(0xFFFF3D00)],
+            colors: [AppTheme.energy, Color(0xFFBB0055)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           shape: BoxShape.circle,
           boxShadow: [
-            BoxShadow(color: AppTheme.orange.withValues(alpha: 0.5), blurRadius: 20, spreadRadius: 2),
+            BoxShadow(color: AppTheme.energy.withValues(alpha: 0.75), blurRadius: 28, spreadRadius: 4),
+            BoxShadow(color: AppTheme.energy.withValues(alpha: 0.4), blurRadius: 52, spreadRadius: 8),
           ],
+          border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.5),
         ),
-        child: const Icon(Icons.add_location_alt_rounded, color: Colors.white, size: 26),
+        child: const Icon(Icons.add_location_alt_rounded, color: Colors.white, size: 28),
       ),
     );
   }

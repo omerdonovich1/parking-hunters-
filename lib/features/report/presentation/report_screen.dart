@@ -783,7 +783,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [AppTheme.orange, Color(0xFFFF8C5A)]),
+                    gradient: const LinearGradient(colors: [AppTheme.orange, Color(0xFF007799)]),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Center(child: Text('🎯', style: TextStyle(fontSize: 22))),
@@ -911,12 +911,12 @@ class _OrangeButton extends StatelessWidget {
         height: 54,
         decoration: BoxDecoration(
           gradient: enabled
-              ? const LinearGradient(colors: [AppTheme.orange, Color(0xFFFF8C5A)])
+              ? const LinearGradient(colors: [AppTheme.energy, Color(0xFFBB0055)])
               : null,
           color: enabled ? null : Colors.white.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(14),
           boxShadow: enabled
-              ? [BoxShadow(color: AppTheme.orange.withValues(alpha: 0.35), blurRadius: 14, offset: const Offset(0, 5))]
+              ? [BoxShadow(color: AppTheme.energy.withValues(alpha: 0.45), blurRadius: 18, offset: const Offset(0, 6))]
               : [],
         ),
         child: Center(child: child),

@@ -273,10 +273,10 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
 
   Color _timeRemainingColor(DateTime expiresAt) {
     final remaining = expiresAt.difference(DateTime.now());
-    if (remaining.isNegative) return Colors.grey;
-    if (remaining.inMinutes < 5) return Colors.red;
-    if (remaining.inMinutes < 15) return Colors.orange;
-    return Colors.blue;
+    if (remaining.isNegative) return Colors.white24;
+    if (remaining.inMinutes < 5) return AppTheme.neonRed;
+    if (remaining.inMinutes < 15) return AppTheme.neonYellow;
+    return AppTheme.orange;
   }
 
   @override
@@ -289,14 +289,16 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        color: AppTheme.card,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        border: Border(
+          top: BorderSide(color: statusColor.withValues(alpha: 0.9), width: 2.5),
+          left: BorderSide(color: statusColor.withValues(alpha: 0.18), width: 1),
+          right: BorderSide(color: statusColor.withValues(alpha: 0.18), width: 1),
+        ),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
-          ),
+          BoxShadow(color: statusColor.withValues(alpha: 0.3), blurRadius: 52, offset: const Offset(0, -8)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.55), blurRadius: 24, offset: const Offset(0, -4)),
         ],
       ),
       child: SingleChildScrollView(
@@ -313,7 +315,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -375,7 +377,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
             LinearPercentIndicator(
               percent: spot.confidence.clamp(0.0, 1.0),
               lineHeight: 14,
-              backgroundColor: Colors.grey.shade200,
+              backgroundColor: Colors.white.withValues(alpha: 0.1),
               progressColor: statusColor,
               barRadius: const Radius.circular(7),
               padding: EdgeInsets.zero,
@@ -473,12 +475,14 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1565C0),
+                  backgroundColor: AppTheme.orange,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
+                  shadowColor: AppTheme.orange.withValues(alpha: 0.5),
+                  elevation: 8,
                 ),
               ),
             ),
@@ -500,14 +504,14 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.secondaryColor,
+                  backgroundColor: AppTheme.energy,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  elevation: 4,
-                  shadowColor: AppTheme.secondaryColor.withValues(alpha: 0.4),
+                  elevation: 8,
+                  shadowColor: AppTheme.energy.withValues(alpha: 0.5),
                 ),
               ),
             ),
