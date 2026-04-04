@@ -178,7 +178,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
             Container(
               color: Colors.black.withValues(alpha: 0.4),
               child: const Center(
-                child: CircularProgressIndicator(color: AppTheme.orange),
+                child: CircularProgressIndicator(color: AppTheme.blue),
               ),
             ),
         ],
@@ -374,12 +374,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         height: 54,
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [AppTheme.orange, Color(0xFFFF8C5A)],
+            colors: [AppTheme.blue, AppTheme.blueDark],
           ),
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: AppTheme.orange.withValues(alpha: 0.4),
+              color: AppTheme.blue.withValues(alpha: 0.4),
               blurRadius: 16,
               offset: const Offset(0, 6),
             ),
@@ -416,7 +416,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
           child: Text(
             _isSignUp ? 'Sign In' : 'Sign Up',
             style: const TextStyle(
-              color: AppTheme.orange,
+              color: AppTheme.blue,
               fontWeight: FontWeight.w700,
               fontSize: 13,
             ),
@@ -519,7 +519,7 @@ class _DarkTextField extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppTheme.orange, width: 1.5),
+          borderSide: const BorderSide(color: AppTheme.blue, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
