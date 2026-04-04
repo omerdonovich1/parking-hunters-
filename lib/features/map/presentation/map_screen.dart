@@ -278,13 +278,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   _SideIconButton(
                     icon: Icons.add,
                     onTap: () => _mapController.move(
-                        _currentPosition, _mapController.camera.zoom + 1),
+                        _mapController.camera.center ?? _currentPosition,
+                        _mapController.camera.zoom + 1),
                   ),
                   const SizedBox(height: 12),
                   _SideIconButton(
                     icon: Icons.remove,
                     onTap: () => _mapController.move(
-                        _currentPosition, _mapController.camera.zoom - 1),
+                        _mapController.camera.center ?? _currentPosition,
+                        _mapController.camera.zoom - 1),
                   ),
                 ],
               ),
