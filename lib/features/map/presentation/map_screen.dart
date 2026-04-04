@@ -318,7 +318,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => SpotBottomSheet(spot: spot),
+      enableDrag: true,
+      useSafeArea: false,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.55,
+        minChildSize: 0.3,
+        maxChildSize: 0.92,
+        snap: true,
+        snapSizes: const [0.55, 0.92],
+        builder: (_, scrollController) =>
+            SpotBottomSheet(spot: spot, scrollController: scrollController),
+      ),
     );
   }
 }

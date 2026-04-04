@@ -15,8 +15,9 @@ import 'spot_photo_viewer.dart';
 
 class SpotBottomSheet extends ConsumerStatefulWidget {
   final ParkingSpot spot;
+  final ScrollController? scrollController;
 
-  const SpotBottomSheet({super.key, required this.spot});
+  const SpotBottomSheet({super.key, required this.spot, this.scrollController});
 
   @override
   ConsumerState<SpotBottomSheet> createState() => _SpotBottomSheetState();
@@ -298,8 +299,11 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+      child: SingleChildScrollView(
+        controller: widget.scrollController,
+        physics: const ClampingScrollPhysics(),
+        child: Padding(
+        padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).padding.bottom + 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -604,6 +608,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
