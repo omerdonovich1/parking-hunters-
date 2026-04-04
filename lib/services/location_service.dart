@@ -19,19 +19,36 @@ class LocationService {
   }
 
   Future<Position> getCurrentPosition() async {
-    final hasPermission = await requestPermission();
-    if (!hasPermission) {
-      throw Exception('Location permission denied');
-    }
     try {
-      return await Geolocator.getCurrentPosition(
+      // Check permission explicitly
+      final hasPermission = await requestPermission();
+      if (!hasPermission) {
+        throw Exception('location_permission_denied');
+      }
+
+      // Request position with timeout
+      final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
           timeLimit: Duration(seconds: 10),
         ),
       );
+
+      debugPrint(
+        '✓ Location acquired: ${position.latitude}, ${position.longitude}',
+      );
+      return position;
+    } on TimeoutException {
+      debugPrint('✗ Location request timed out (10s limit exceeded)');
+      throw Exception('location_timeout');
+    } on LocationServiceDisabledException {
+      debugPrint('✗ Location service is disabled on device');
+      throw Exception('location_service_disabled');
+    } on PermissionDeniedException {
+      debugPrint('✗ Location permission denied by user');
+      throw Exception('location_permission_denied');
     } catch (e) {
-      debugPrint('Get position error: $e');
+      debugPrint('✗ Location service error: $e');
       rethrow;
     }
   }

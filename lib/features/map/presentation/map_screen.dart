@@ -62,8 +62,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Future<void> _initLocation() async {
     try {
       final position = await _locationService.getCurrentPosition();
+
+      // Validate location coordinates
+      if (position.latitude < -90 || position.latitude > 90 ||
+          position.longitude < -180 || position.longitude > 180) {
+        throw Exception('Invalid coordinates received');
+      }
+
       final latlng = LatLng(position.latitude, position.longitude);
       if (!mounted) return;
+
+      debugPrint('✅ Location acquired: ${position.latitude}, ${position.longitude}');
+
       setState(() {
         _currentPosition = latlng;
         _isLoadingLocation = false;
@@ -73,7 +83,30 @@ class _MapScreenState extends ConsumerState<MapScreen>
           .loadNearbySpots(position.latitude, position.longitude,
               radiusKm: ref.read(nearbyRadiusProvider));
     } catch (e) {
-      if (mounted) setState(() => _isLoadingLocation = false);
+      debugPrint('❌ Location error: $e');
+      if (mounted) {
+        // Show error snackbar with context-aware message
+        String message = 'Couldn\'t get your location';
+        if (e.toString().contains('permission')) {
+          message = 'Location permission denied. Using default area.';
+        } else if (e.toString().contains('timeout')) {
+          message = 'Location request timed out. Using default area.';
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            duration: const Duration(seconds: 4),
+            backgroundColor: AppTheme.orange.withValues(alpha: 0.9),
+          ),
+        );
+
+        setState(() => _isLoadingLocation = false);
+        // Still load default location spots
+        ref.read(parkingSpotsProvider.notifier)
+            .loadNearbySpots(Constants.defaultLat, Constants.defaultLng,
+                radiusKm: ref.read(nearbyRadiusProvider));
+      }
     }
   }
 
