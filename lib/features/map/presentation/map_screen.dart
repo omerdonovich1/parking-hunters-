@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +14,11 @@ import '../../../core/utils/constants.dart';
 import '../../../core/theme/app_theme.dart';
 import 'widgets/spot_bottom_sheet.dart';
 import 'widgets/map_filter_bar.dart';
+
+// Run geocoding in background isolate
+Future<List<Location>> _geocodeInBackground(String address) async {
+  return locationFromAddress(address);
+}
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -74,18 +80,23 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Future<void> _searchAddress(String address) async {
     if (address.isEmpty) return;
     try {
-      final locations = await locationFromAddress(address);
+      // Run geocoding in background isolate (non-blocking)
+      final locations = await compute(_geocodeInBackground, address);
       if (locations.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Address not found')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Address not found')),
+          );
+        }
         return;
       }
       final loc = locations.first;
       final latlng = LatLng(loc.latitude, loc.longitude);
       _mapController.move(latlng, 15);
-      setState(() => _isSearching = false);
-      _searchController.clear();
+      if (mounted) {
+        setState(() => _isSearching = false);
+        _searchController.clear();
+      }
       ref.read(parkingSpotsProvider.notifier)
           .loadNearbySpots(loc.latitude, loc.longitude,
               radiusKm: ref.read(nearbyRadiusProvider));
