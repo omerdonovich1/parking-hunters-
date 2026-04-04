@@ -11,6 +11,7 @@ import '../../../services/location_service.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/theme/app_theme.dart';
 import 'widgets/spot_bottom_sheet.dart';
+import 'widgets/map_filter_bar.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
