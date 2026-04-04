@@ -16,6 +16,7 @@ import '../../../core/utils/constants.dart';
 import '../../../core/theme/app_theme.dart';
 import 'widgets/spot_bottom_sheet.dart';
 import 'widgets/map_filter_bar.dart';
+import 'widgets/street_view_sheet.dart';
 
 // Run geocoding in background isolate
 Future<List<Location>> _geocodeInBackground(String address) async {
@@ -42,6 +43,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   bool _hunterModeOpen = false;
   List<RoadStatus> _roadStatus = [];
   bool _showReportForm = false;
+  bool _showStreetView = false;
 
   late AnimationController _pulseController;
   Timer? _panDebounceTimer;
@@ -431,6 +433,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   ),
                   const SizedBox(height: 12),
                   _SideIconButton(
+                    icon: Icons.streetview_rounded,
+                    isActive: _showStreetView,
+                    onTap: () => setState(() {
+                      _showStreetView = !_showStreetView;
+                      if (_showStreetView) _showReportForm = false;
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  _SideIconButton(
                     icon: Icons.my_location_rounded,
                     onTap: () => _mapController.move(_currentPosition, 15),
                   ),
@@ -507,6 +518,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 },
                 onClose: () => setState(() => _showReportForm = false),
               ),
+            ),
+
+          // ── Street View Sheet ──────────────────────────────────────────────
+          if (_showStreetView)
+            StreetViewSheet(
+              lat: _currentPosition.latitude,
+              lng: _currentPosition.longitude,
+              onClose: () => setState(() => _showStreetView = false),
             ),
         ],
       ),
@@ -816,7 +835,8 @@ class _HunterSideButton extends StatelessWidget {
 class _SideIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
-  const _SideIconButton({required this.icon, required this.onTap});
+  final bool isActive;
+  const _SideIconButton({required this.icon, required this.onTap, this.isActive = false});
 
   @override
   Widget build(BuildContext context) {
@@ -826,15 +846,16 @@ class _SideIconButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
+              color: isActive ? AppTheme.orange.withValues(alpha: 0.18) : Colors.white.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              border: Border.all(color: isActive ? AppTheme.orange.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.1)),
             ),
-            child: Icon(icon, color: Colors.white70, size: 20),
+            child: Icon(icon, color: isActive ? AppTheme.orange : Colors.white70, size: 20),
           ),
         ),
       ),
