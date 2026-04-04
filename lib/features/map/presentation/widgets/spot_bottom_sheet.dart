@@ -8,6 +8,7 @@ import 'package:percent_indicator/linear_percent_indicator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../models/parking_spot_model.dart';
 import '../../../../providers/map_provider.dart';
+import '../../../../providers/auth_provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import 'spot_photo_viewer.dart';
 
@@ -23,6 +24,7 @@ class SpotBottomSheet extends ConsumerStatefulWidget {
 class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
   Timer? _countdownTimer;
   bool _isMarkingTaken = false;
+  bool _isParking = false;
 
   static const double _maxRadiusMeters = 50.0;
 
@@ -109,6 +111,85 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
       // If location fetch fails, block the action
       if (mounted) {
         setState(() => _isMarkingTaken = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not get your location. Make sure GPS is on.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _iParkHere() async {
+    if (_isParking) return;
+    setState(() => _isParking = true);
+
+    try {
+      if (!kIsWeb) {
+        final permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied ||
+            permission == LocationPermission.deniedForever) {
+          await Geolocator.requestPermission();
+        }
+
+        final position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        ).timeout(const Duration(seconds: 8));
+
+        final distance = _distanceMeters(
+          position.latitude, position.longitude,
+          widget.spot.lat, widget.spot.lng,
+        );
+
+        if (distance > _maxRadiusMeters) {
+          if (mounted) {
+            setState(() => _isParking = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'You\'re ${distance.toInt()}m away — drive to the spot first!',
+                ),
+                backgroundColor: Colors.orange.shade800,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      // Mark spot as taken in Firestore
+      await ref.read(firestoreServiceProvider).markSpotTaken(widget.spot.id);
+
+      // Award +5 points to the user who parked
+      final userId = ref.read(currentUserProvider)?.uid;
+      if (userId != null) {
+        await ref.read(firestoreServiceProvider).updateUserPoints(userId, 5);
+      }
+
+      ref.read(parkingSpotsProvider.notifier).removeExpiredSpots();
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Text('🎉 Enjoy your spot! ', style: TextStyle(fontSize: 15)),
+                Text('+5 pts', style: TextStyle(color: Color(0xFF00E676), fontWeight: FontWeight.bold, fontSize: 15)),
+              ],
+            ),
+            backgroundColor: const Color(0xFF1B5E20),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isParking = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Could not get your location. Make sure GPS is on.'),
@@ -394,7 +475,36 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
+            // I Parked Here — primary CTA for the hunter
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isParking ? null : _iParkHere,
+                icon: _isParking
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('🎉', style: TextStyle(fontSize: 18)),
+                label: Text(
+                  _isParking ? 'Checking location...' : 'I Parked Here!  +5 pts',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.secondaryColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  elevation: 4,
+                  shadowColor: AppTheme.secondaryColor.withValues(alpha: 0.4),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
             // Mark as Taken — only allowed within 50m
             SizedBox(
               width: double.infinity,
