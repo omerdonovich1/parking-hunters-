@@ -80,6 +80,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   double _currentZoom = 15;
 
   late AnimationController _pulseController;
+  AnimationController? _flyController;
 
   @override
   void initState() {
@@ -94,8 +95,45 @@ class _MapScreenState extends ConsumerState<MapScreen>
   @override
   void dispose() {
     _pulseController.dispose();
+    _flyController?.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  /// Cinematic camera pan + zoom toward [target].
+  /// Offsets north so the spot sits above the bottom sheet.
+  void _flyToSpot(LatLng target) {
+    _flyController?.dispose();
+    _flyController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 550),
+    );
+
+    final camera = _mapController.camera;
+    final startLat = camera.center.latitude;
+    final startLng = camera.center.longitude;
+    final startZoom = camera.zoom;
+    // Nudge north ~90m so spot is visible above the 55% bottom sheet
+    final endLat = target.latitude + 0.0007;
+    final endLng = target.longitude;
+    final endZoom = startZoom < 15.5 ? 15.5 : startZoom;
+
+    final curve = CurvedAnimation(parent: _flyController!, curve: Curves.easeOutCubic);
+    final latAnim  = Tween<double>(begin: startLat,  end: endLat).animate(curve);
+    final lngAnim  = Tween<double>(begin: startLng,  end: endLng).animate(curve);
+    final zoomAnim = Tween<double>(begin: startZoom, end: endZoom).animate(curve);
+
+    _flyController!.addListener(() {
+      _mapController.move(LatLng(latAnim.value, lngAnim.value), zoomAnim.value);
+    });
+    _flyController!.addStatusListener((s) {
+      if (s == AnimationStatus.completed || s == AnimationStatus.dismissed) {
+        _flyController?.dispose();
+        _flyController = null;
+      }
+    });
+
+    _flyController!.forward();
   }
 
   Future<void> _initLocation() async {
@@ -219,7 +257,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       width: 68,
                       height: 76,
                       child: GestureDetector(
-                        onTap: () { HapticFeedback.selectionClick(); _showSpotSheet(spot); },
+                        onTap: () { HapticFeedback.selectionClick(); _flyToSpot(LatLng(spot.lat, spot.lng)); _showSpotSheet(spot); },
                         child: _SpotMarker(
                           spot: spot,
                           color: color,
