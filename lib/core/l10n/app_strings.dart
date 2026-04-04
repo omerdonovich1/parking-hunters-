@@ -214,6 +214,16 @@ class AppStrings {
   String levelBadge(int lvl, String title) =>
       isHebrew ? 'רמה $lvl · $title' : 'Level $lvl · $title';
 
+  // ── Map zone / 200m radius ─────────────────────────────────────────────────
+  String get noParkingNearby => isHebrew ? 'אין חניות באזור 200 מ\' מכאן' : 'No parking found in 200m zone';
+  String get zoneLabel       => isHebrew ? 'אזור חיפוש 200מ\''             : '200m Search Zone';
+  String get searchHint      => isHebrew ? 'חפש כתובת…'                   : 'Search address…';
+
+  // ── Filter bar ────────────────────────────────────────────────────────────
+  String get filterHigh => isHebrew ? 'גבוה'   : 'High';
+  String get filterMid  => isHebrew ? 'בינוני' : 'Mid';
+  String get filterLow  => isHebrew ? 'נמוך'   : 'Low';
+
   // ── Onboarding ─────────────────────────────────────────────────────────────
   String get ob1Title => isHebrew ? 'מצא חנייה מיידית'  : 'Find Parking Instantly';
   String get ob1Sub   => isHebrew

@@ -8,8 +8,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:geocoding/geocoding.dart';
 import '../../../models/parking_spot_model.dart';
 import '../../../providers/map_provider.dart';
+import '../../../providers/locale_provider.dart';
 import '../../../services/location_service.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/theme/app_theme.dart';
@@ -35,6 +37,31 @@ class _Cluster {
     }
     return counts.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
   }
+}
+
+/// Haversine distance in metres between two [LatLng] points.
+double _haversineMeters(LatLng a, LatLng b) {
+  const r = 6371000.0;
+  final dLat = (b.latitude - a.latitude) * math.pi / 180;
+  final dLng = (b.longitude - a.longitude) * math.pi / 180;
+  final sinDLat = math.sin(dLat / 2);
+  final sinDLng = math.sin(dLng / 2);
+  final x = sinDLat * sinDLat +
+      math.cos(a.latitude * math.pi / 180) *
+          math.cos(b.latitude * math.pi / 180) *
+          sinDLng * sinDLng;
+  return r * 2 * math.atan2(math.sqrt(x), math.sqrt(1 - x));
+}
+
+/// Zoom level that makes the 200 m radius circle fill [fillRatio] of screen width.
+double _zoomForRadius200m(double latDeg, double screenWidthPx,
+    {double fillRatio = 0.75}) {
+  const earthMppZoom0 = 156543.03392;
+  final metersPerPixel = 400.0 / (screenWidthPx * fillRatio);
+  final zoom =
+      math.log(earthMppZoom0 * math.cos(latDeg * math.pi / 180) / metersPerPixel) /
+          math.ln2;
+  return zoom.clamp(13.0, 18.5);
 }
 
 /// Groups spots into clusters. Radius shrinks as zoom increases.
@@ -78,6 +105,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
   bool _isSearching = false;
   bool _hunterModeOpen = false;
   double _currentZoom = 15;
+
+  // 200 m search zone centre — defaults to user's GPS, updates on geocode search
+  LatLng _zoneCenter = const LatLng(Constants.defaultLat, Constants.defaultLng);
 
   late AnimationController _pulseController;
   AnimationController? _flyController;
@@ -145,14 +175,38 @@ class _MapScreenState extends ConsumerState<MapScreen>
       final position = await _locationService.getCurrentPosition();
       final latlng = LatLng(position.latitude, position.longitude);
       if (!mounted) return;
+      final screenW = MediaQuery.of(context).size.width;
+      final zoom = _zoomForRadius200m(position.latitude, screenW);
       setState(() {
         _currentPosition = latlng;
+        _zoneCenter = latlng;
         _isLoadingLocation = false;
       });
-      _mapController.move(latlng, 15);
+      _mapController.move(latlng, zoom);
       // Firestore stream auto-loads all active spots — no manual fetch needed.
     } catch (e) {
       if (mounted) setState(() => _isLoadingLocation = false);
+    }
+  }
+
+  /// Geocodes [query] → moves zone centre + auto-zooms to 200 m fill.
+  Future<void> _searchLocation(String query) async {
+    if (query.trim().isEmpty) return;
+    try {
+      final locations = await locationFromAddress(query);
+      if (!mounted || locations.isEmpty) return;
+      final loc = locations.first;
+      final latlng = LatLng(loc.latitude, loc.longitude);
+      final screenW = MediaQuery.of(context).size.width;
+      final zoom = _zoomForRadius200m(loc.latitude, screenW);
+      setState(() {
+        _zoneCenter = latlng;
+        _isSearching = false;
+        _searchController.clear();
+      });
+      _mapController.move(latlng, zoom);
+    } catch (e) {
+      debugPrint('Geocoding error: $e');
     }
   }
 
@@ -190,9 +244,22 @@ class _MapScreenState extends ConsumerState<MapScreen>
       }
     });
 
+    final s = ref.watch(appStringsProvider);
     final spots = ref.watch(parkingSpotsProvider);
     final activeFilters = ref.watch(activeFiltersProvider);
-    final visible = spots.where((s) => !s.isExpired && activeFilters.contains(s.status)).toList();
+
+    // Filter by status + 200 m zone, then sort closest → farthest
+    final filtered =
+        spots.where((sp) => !sp.isExpired && activeFilters.contains(sp.status)).toList();
+    final nearby = filtered
+        .where((sp) =>
+            _haversineMeters(_zoneCenter, LatLng(sp.lat, sp.lng)) <= 200)
+        .toList()
+      ..sort((a, b) =>
+          _haversineMeters(_zoneCenter, LatLng(a.lat, a.lng))
+              .compareTo(_haversineMeters(_zoneCenter, LatLng(b.lat, b.lng))));
+    final visible = nearby;
+    final noSpotsInZone = filtered.isNotEmpty && nearby.isEmpty;
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -227,35 +294,44 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 userAgentPackageName: 'com.example.parking_hunter',
                 retinaMode: true,
               ),
-              // ── Radar rings around user's position ───────────────────────
+              // ── 200 m Search Zone circle (animated pulse) ────────────────
               if (!_isLoadingLocation)
-                CircleLayer(
-                  circles: [
-                    CircleMarker(
-                      point: _currentPosition,
-                      radius: 120,
-                      useRadiusInMeter: true,
-                      color: AppTheme.orange.withValues(alpha: 0.04),
-                      borderStrokeWidth: 1.5,
-                      borderColor: AppTheme.orange.withValues(alpha: 0.2),
-                    ),
-                    CircleMarker(
-                      point: _currentPosition,
-                      radius: 280,
-                      useRadiusInMeter: true,
-                      color: Colors.transparent,
-                      borderStrokeWidth: 1,
-                      borderColor: AppTheme.orange.withValues(alpha: 0.1),
-                    ),
-                    CircleMarker(
-                      point: _currentPosition,
-                      radius: 500,
-                      useRadiusInMeter: true,
-                      color: Colors.transparent,
-                      borderStrokeWidth: 0.8,
-                      borderColor: AppTheme.orange.withValues(alpha: 0.05),
-                    ),
-                  ],
+                AnimatedBuilder(
+                  animation: _pulseController,
+                  builder: (_, __) => CircleLayer(
+                    circles: [
+                      // Solid filled zone — breathing opacity
+                      CircleMarker(
+                        point: _zoneCenter,
+                        radius: 200,
+                        useRadiusInMeter: true,
+                        color: AppTheme.neonGreen.withValues(
+                            alpha: 0.04 + 0.025 * _pulseController.value),
+                        borderStrokeWidth: 1.6,
+                        borderColor: AppTheme.neonGreen.withValues(
+                            alpha: 0.35 + 0.25 * _pulseController.value),
+                      ),
+                      // Expanding outer ring — fades out as it grows
+                      CircleMarker(
+                        point: _zoneCenter,
+                        radius: 200 + 12 * _pulseController.value,
+                        useRadiusInMeter: true,
+                        color: Colors.transparent,
+                        borderStrokeWidth: 0.8,
+                        borderColor: AppTheme.neonGreen.withValues(
+                            alpha: 0.18 * (1 - _pulseController.value)),
+                      ),
+                      // Subtle 100 m inner reference ring
+                      CircleMarker(
+                        point: _currentPosition,
+                        radius: 80,
+                        useRadiusInMeter: true,
+                        color: Colors.transparent,
+                        borderStrokeWidth: 0.8,
+                        borderColor: AppTheme.orange.withValues(alpha: 0.12),
+                      ),
+                    ],
+                  ),
                 ),
               // ── Parking spot markers — clustered by zoom level ────────────
               MarkerLayer(
@@ -335,8 +411,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   _isSearching = false;
                   _searchController.clear();
                 }),
-                onSubmitted: (_) => setState(() => _isSearching = false),
+                onSubmitted: (q) => _searchLocation(q),
                 spotCount: visible.length,
+                hintText: s.searchHint,
               ),
             ),
           ),
@@ -365,7 +442,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   const SizedBox(height: 16),
                   _SideIconButton(
                     icon: Icons.my_location_rounded,
-                    onTap: () => _mapController.move(_currentPosition, 15),
+                    onTap: () {
+                      final screenW = MediaQuery.of(context).size.width;
+                      final zoom = _zoomForRadius200m(_currentPosition.latitude, screenW);
+                      setState(() => _zoneCenter = _currentPosition);
+                      _mapController.move(_currentPosition, zoom);
+                    },
                   ),
                   const SizedBox(height: 12),
                   _SideIconButton(
@@ -383,6 +465,44 @@ class _MapScreenState extends ConsumerState<MapScreen>
               ),
             ),
           ),
+
+          // ── No parking in zone hint ───────────────────────────────────────
+          if (noSpotsInZone)
+            Positioned(
+              bottom: 120,
+              left: 24,
+              right: 24,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.card.withValues(alpha: 0.95),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 16,
+                          spreadRadius: 2),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.search_off_rounded,
+                          color: Colors.white54, size: 18),
+                      const SizedBox(width: 8),
+                      Text(s.noParkingNearby,
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 13)),
+                    ],
+                  ),
+                )
+                    .animate()
+                    .fadeIn(duration: 300.ms)
+                    .slideY(begin: 0.2, end: 0, duration: 300.ms),
+              ),
+            ),
 
           // ── Loading shimmer HUD ───────────────────────────────────────────
           if (_isLoadingLocation)
@@ -657,11 +777,13 @@ class _GlassSearchBar extends StatelessWidget {
   final VoidCallback onClose;
   final ValueChanged<String> onSubmitted;
   final int spotCount;
+  final String hintText;
 
   const _GlassSearchBar({
     required this.controller, required this.isSearching,
     required this.onTap, required this.onClose,
     required this.onSubmitted, required this.spotCount,
+    this.hintText = 'Search address…',
   });
 
   @override
@@ -687,9 +809,9 @@ class _GlassSearchBar extends StatelessWidget {
                       controller: controller,
                       autofocus: true,
                       style: const TextStyle(color: Colors.white, fontSize: 14),
-                      decoration: const InputDecoration(
-                        hintText: 'Search address…',
-                        hintStyle: TextStyle(color: Colors.white38),
+                      decoration: InputDecoration(
+                        hintText: hintText,
+                        hintStyle: const TextStyle(color: Colors.white38),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
@@ -712,9 +834,10 @@ class _GlassSearchBar extends StatelessWidget {
                     child: Row(children: [
                       const Icon(Icons.search_rounded, color: Colors.white60, size: 20),
                       const SizedBox(width: 10),
-                      const Expanded(
-                        child: Text('Search location…',
-                            style: TextStyle(color: Colors.white38, fontSize: 14)),
+                      Expanded(
+                        child: Text(hintText,
+                            style: const TextStyle(
+                                color: Colors.white38, fontSize: 14)),
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -742,10 +865,11 @@ class _GlassFilterBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final active = ref.watch(activeFiltersProvider);
+    final s = ref.watch(appStringsProvider);
     final filters = [
-      (SpotStatus.available,     '🟢', 'Free',  AppTheme.neonGreen),
-      (SpotStatus.soonAvailable, '🟡', 'Soon',  AppTheme.neonYellow),
-      (SpotStatus.lowConfidence, '🔴', 'Low',   AppTheme.neonRed),
+      (SpotStatus.available,     '🟢', s.filterHigh, AppTheme.neonGreen),
+      (SpotStatus.soonAvailable, '🟡', s.filterMid,  AppTheme.neonYellow),
+      (SpotStatus.lowConfidence, '🔴', s.filterLow,  AppTheme.neonRed),
     ];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
