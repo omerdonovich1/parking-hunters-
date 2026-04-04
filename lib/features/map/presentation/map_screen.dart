@@ -182,6 +182,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 userAgentPackageName: 'com.example.parking_hunter',
                 retinaMode: true,
               ),
+              // 200m radius around user
+              if (!_isLoadingLocation)
+                CircleLayer(
+                  circles: [
+                    CircleMarker(
+                      point: _currentPosition,
+                      radius: 200,
+                      useRadiusInMeter: true,
+                      color: AppTheme.orange.withValues(alpha: 0.07),
+                      borderColor: AppTheme.orange.withValues(alpha: 0.35),
+                      borderStrokeWidth: 1.5,
+                    ),
+                  ],
+                ),
               // Parking spot markers
               MarkerLayer(
                 markers: visible.map((spot) {
