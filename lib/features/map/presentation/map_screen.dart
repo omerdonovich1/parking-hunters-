@@ -33,6 +33,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   bool _hunterModeOpen = false;
 
   late AnimationController _pulseController;
+  Timer? _panDebounceTimer;
 
   @override
   void initState() {
@@ -48,6 +49,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   void dispose() {
     _pulseController.dispose();
     _searchController.dispose();
+    _panDebounceTimer?.cancel();
     super.dispose();
   }
 
@@ -101,10 +103,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final distance = _currentPosition.distanceTo(LatLng(lat, lng));
     const threshold = 0.005; // ~0.5 km in degrees
     if (distance > threshold) {
-      setState(() => _currentPosition = LatLng(lat, lng));
-      ref.read(parkingSpotsProvider.notifier)
-          .loadNearbySpots(lat, lng,
-              radiusKm: ref.read(nearbyRadiusProvider));
+      // Debounce: cancel previous timer, wait 500ms before querying
+      _panDebounceTimer?.cancel();
+      _panDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+        setState(() => _currentPosition = LatLng(lat, lng));
+        ref.read(parkingSpotsProvider.notifier)
+            .loadNearbySpots(lat, lng,
+                radiusKm: ref.read(nearbyRadiusProvider));
+      });
     }
   }
 
