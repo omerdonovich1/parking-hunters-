@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:percent_indicator/linear_percent_indicator.dart';
@@ -57,6 +58,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
 
   Future<void> _markAsTaken() async {
     if (_isMarkingTaken) return;
+    HapticFeedback.mediumImpact();
     setState(() => _isMarkingTaken = true);
 
     try {
@@ -123,6 +125,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
 
   Future<void> _iParkHere() async {
     if (_isParking) return;
+    HapticFeedback.heavyImpact();
     setState(() => _isParking = true);
 
     try {
@@ -535,6 +538,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () {
+                      HapticFeedback.lightImpact();
                       ref
                           .read(firestoreServiceProvider)
                           .denySpot(spot.id, 'local_user');
@@ -566,6 +570,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
+                      HapticFeedback.lightImpact();
                       ref
                           .read(firestoreServiceProvider)
                           .confirmSpot(spot.id, 'local_user');

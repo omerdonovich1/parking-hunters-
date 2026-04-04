@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../providers/report_provider.dart';
@@ -82,6 +83,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
 
   Future<void> _submitReport() async {
     if (_lat == null || _lng == null) return;
+    HapticFeedback.heavyImpact();
     await ref.read(reportProvider.notifier).submitReport(
       lat: _lat!,
       lng: _lng!,
@@ -121,6 +123,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
 
   void _nextStep() {
     if (_currentStep < 3) {
+      HapticFeedback.lightImpact();
       setState(() => _currentStep++);
       // Auto-trigger AI scan when entering step 3
       if (_currentStep == 2) {

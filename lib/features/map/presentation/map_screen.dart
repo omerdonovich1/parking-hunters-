@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -180,7 +181,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       width: 80,
                       height: 56,
                       child: GestureDetector(
-                        onTap: () => _showSpotSheet(spot),
+                        onTap: () { HapticFeedback.selectionClick(); _showSpotSheet(spot); },
                         child: _SpotMarker(
                           spot: spot,
                           color: color,
@@ -195,7 +196,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       width: 56,
                       height: 56,
                       child: GestureDetector(
-                        onTap: () => _mapController.move(cluster.center, _currentZoom + 2),
+                        onTap: () { HapticFeedback.lightImpact(); _mapController.move(cluster.center, _currentZoom + 2); },
                         child: _ClusterMarker(count: cluster.spots.length, color: color),
                       ),
                     );
@@ -614,7 +615,7 @@ class _HunterSideButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: () { HapticFeedback.heavyImpact(); onTap(); },
       child: Container(
         width: 52,
         height: 52,
