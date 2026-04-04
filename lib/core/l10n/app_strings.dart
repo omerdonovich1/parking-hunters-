@@ -40,15 +40,15 @@ class AppStrings {
   String get navRanks   => isHebrew ? 'דירוג'   : 'Ranks';
 
   // ── Map filter ─────────────────────────────────────────────────────────────
-  String get filterAvailable => isHebrew ? 'פנוי'          : 'Available';
-  String get filterSoon      => isHebrew ? 'בקרוב'         : 'Soon';
-  String get filterLowConf   => isHebrew ? 'ביטחון נמוך'   : 'Low conf.';
+  String get filterAvailable => isHebrew ? 'גבוה'   : 'High';
+  String get filterSoon      => isHebrew ? 'בינוני' : 'Mid';
+  String get filterLowConf   => isHebrew ? 'נמוך'   : 'Low';
 
   // ── Spot status labels ─────────────────────────────────────────────────────
-  String get statusAvailable      => isHebrew ? 'פנוי'           : 'Available';
-  String get statusSoonAvailable  => isHebrew ? 'בקרוב פנוי'     : 'Soon Available';
-  String get statusLowConfidence  => isHebrew ? 'ביטחון נמוך'    : 'Low Confidence';
-  String get statusTaken          => isHebrew ? 'תפוס'           : 'Taken';
+  String get statusAvailable      => isHebrew ? 'גבוה'    : 'High';
+  String get statusSoonAvailable  => isHebrew ? 'בינוני'  : 'Mid';
+  String get statusLowConfidence  => isHebrew ? 'נמוך'    : 'Low';
+  String get statusTaken          => isHebrew ? 'תפוס'    : 'Taken';
 
   // ── Spot bottom sheet ──────────────────────────────────────────────────────
   String get liveConfidence      => isHebrew ? 'ביטחון בזמן אמת'  : 'LIVE CONFIDENCE';
@@ -202,6 +202,17 @@ class AppStrings {
 
   String kmLabel(double radius) =>
       isHebrew ? '${radius.toStringAsFixed(1)} ק"מ' : '${radius.toStringAsFixed(1)} km';
+
+  // ── Success animation ──────────────────────────────────────────────────────
+  String get successfulHunt  => isHebrew ? 'ציד מוצלח! 🎯'        : 'Successful Hunt! 🎯';
+  String get thanksForHelp   => isHebrew ? 'תודה על עזרתך לקהילה!' : 'Thanks for helping the community!';
+  String pointsLabel(int n)  => isHebrew ? '+$n נקודות'            : '+$n points';
+
+  // ── Level-up overlay ───────────────────────────────────────────────────────
+  String get levelUp         => isHebrew ? '!עלית רמה'             : 'LEVEL UP!';
+  String get tapToContinue   => isHebrew ? 'לחץ בכל מקום להמשך'   : 'Tap anywhere to continue';
+  String levelBadge(int lvl, String title) =>
+      isHebrew ? 'רמה $lvl · $title' : 'Level $lvl · $title';
 
   // ── Onboarding ─────────────────────────────────────────────────────────────
   String get ob1Title => isHebrew ? 'מצא חנייה מיידית'  : 'Find Parking Instantly';
