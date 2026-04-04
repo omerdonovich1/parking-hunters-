@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   AppTheme._();
@@ -82,6 +83,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
+      fontFamily: GoogleFonts.spaceGrotesk().fontFamily,
       scaffoldBackgroundColor: bg,
       colorScheme: const ColorScheme.dark(
         primary: orange,
@@ -89,23 +91,6 @@ class AppTheme {
         surface: surface,
         onSurface: Colors.white,
         onPrimary: Colors.white,
-      ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        centerTitle: true,
-        systemOverlayStyle: SystemUiOverlayStyle(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: Brightness.light,
-        ),
-        titleTextStyle: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w800,
-          color: Colors.white,
-          letterSpacing: 0.3,
-        ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -177,17 +162,36 @@ class AppTheme {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       ),
       dividerTheme: const DividerThemeData(color: divider, thickness: 1, space: 1),
-      textTheme: const TextTheme(
-        displayLarge: TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -0.5),
-        displayMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.3),
-        headlineLarge: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white),
-        headlineMedium: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
-        titleLarge: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white),
-        titleMedium: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
-        bodyLarge: TextStyle(fontSize: 15, color: Color(0xFFCBD5E1)),
-        bodyMedium: TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
-        labelLarge: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: orange, letterSpacing: 0.3),
-        labelSmall: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF64748B), letterSpacing: 0.5),
+      textTheme: GoogleFonts.spaceGroteskTextTheme(
+        const TextTheme(
+          displayLarge:  TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -0.5),
+          displayMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.3),
+          headlineLarge: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white),
+          headlineMedium:TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
+          titleLarge:    TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white),
+          titleMedium:   TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
+          bodyLarge:     TextStyle(fontSize: 15, color: Color(0xFFCBD5E1)),
+          bodyMedium:    TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+          labelLarge:    TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: orange, letterSpacing: 0.3),
+          labelSmall:    TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF64748B), letterSpacing: 0.5),
+        ),
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: true,
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+        ),
+        titleTextStyle: GoogleFonts.spaceGrotesk(
+          fontSize: 18,
+          fontWeight: FontWeight.w800,
+          color: Colors.white,
+          letterSpacing: 0.2,
+        ),
       ),
     );
   }
@@ -197,6 +201,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
+      fontFamily: GoogleFonts.spaceGrotesk().fontFamily,
       scaffoldBackgroundColor: bgLight,
       colorScheme: ColorScheme.fromSeed(
         seedColor: energy,
@@ -254,14 +259,16 @@ class AppTheme {
         elevation: 0,
         shape: CircleBorder(),
       ),
-      textTheme: const TextTheme(
-        displayLarge: TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: Color(0xFF080B14)),
-        headlineLarge: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Color(0xFF080B14)),
-        headlineMedium: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Color(0xFF080B14)),
-        titleLarge: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF0D1117)),
-        bodyLarge: TextStyle(fontSize: 15, color: Color(0xFF374151)),
-        bodyMedium: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
-        labelLarge: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: energy),
+      textTheme: GoogleFonts.spaceGroteskTextTheme(
+        const TextTheme(
+          displayLarge:  TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: Color(0xFF080B14)),
+          headlineLarge: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Color(0xFF080B14)),
+          headlineMedium:TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Color(0xFF080B14)),
+          titleLarge:    TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF0D1117)),
+          bodyLarge:     TextStyle(fontSize: 15, color: Color(0xFF374151)),
+          bodyMedium:    TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+          labelLarge:    TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: energy),
+        ),
       ),
     );
   }
