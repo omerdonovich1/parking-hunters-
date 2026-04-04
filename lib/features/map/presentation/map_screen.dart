@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:go_router/go_router.dart';
+import 'package:geocoding/geocoding.dart';
 import '../../../models/parking_spot_model.dart';
 import '../../../providers/map_provider.dart';
 import '../../../services/location_service.dart';
@@ -65,6 +66,33 @@ class _MapScreenState extends ConsumerState<MapScreen>
               radiusKm: ref.read(nearbyRadiusProvider));
     } catch (e) {
       if (mounted) setState(() => _isLoadingLocation = false);
+    }
+  }
+
+  Future<void> _searchAddress(String address) async {
+    if (address.isEmpty) return;
+    try {
+      final locations = await locationFromAddress(address);
+      if (locations.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Address not found')),
+        );
+        return;
+      }
+      final loc = locations.first;
+      final latlng = LatLng(loc.latitude, loc.longitude);
+      _mapController.move(latlng, 15);
+      setState(() => _isSearching = false);
+      _searchController.clear();
+      ref.read(parkingSpotsProvider.notifier)
+          .loadNearbySpots(loc.latitude, loc.longitude,
+              radiusKm: ref.read(nearbyRadiusProvider));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Search failed: $e')),
+        );
+      }
     }
   }
 
@@ -166,7 +194,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   _isSearching = false;
                   _searchController.clear();
                 }),
-                onSubmitted: (_) => setState(() => _isSearching = false),
+                onSubmitted: (address) => _searchAddress(address),
                 spotCount: visible.length,
               ),
             ),
