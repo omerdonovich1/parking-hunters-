@@ -206,6 +206,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   _onMapPanned(pos.center!.latitude, pos.center!.longitude);
                 }
               },
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+              ),
             ),
             children: [
               // Dark-styled OSM tiles
