@@ -44,9 +44,10 @@ Users report free parking spots in real time. The app uses **AI (Claude Vision)*
 
 | Person | Branch | Responsibility |
 |--------|--------|---------------|
-| Sharon (P1) | `feature/spot-reporting` | Report flow + AI scan |
-| Person 2 | `feature/live-map` | Real-time map from Firestore |
-| Person 3 | `feature/profile-gamification` | Profile, points, badges, leaderboard |
+| Sharon | `main` | Project lead — integration, Firebase config, deployment |
+| Omer (P1) | `feature/spot-reporting` | Reporter journey — report flow, AI scan, spot lifecycle |
+| Yarin (P2) | `feature/live-map` | Explorer journey — real-time map, spot markers, filters |
+| Omer Gal (P3) | `feature/profile-gamification` | Competitor journey — profile, XP, badges, leaderboard |
 
 Each person has a detailed guide in the `docs/` folder.
 

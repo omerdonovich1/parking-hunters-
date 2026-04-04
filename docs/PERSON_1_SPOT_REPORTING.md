@@ -1,4 +1,4 @@
-# 🅿️ Person 1 — Spot Reporting Feature
+# 🅿️ Omer (P1) — Reporter Journey
 **Branch:** `feature/spot-reporting`
 
 ---
