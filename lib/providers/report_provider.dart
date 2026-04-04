@@ -107,7 +107,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
     required double lat,
     required double lng,
     String? note,
-    int estimatedMinutes = 30,
+    int estimatedMinutes = 60,
   }) async {
     state = state.copyWith(isLoading: true, clearError: true);
 
@@ -124,7 +124,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
         reportedBy: 'demo_user',
         reportedAt: now,
         expiresAt: now.add(Duration(minutes: estimatedMinutes)),
-        confidence: confidence / 100.0,
+        aiConfidence: confidence / 100.0,
         status: SpotStatus.available,
         note: note,
       );
@@ -166,7 +166,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
         deniedCount: 0,
       );
 
-      await _firestoreService.addParkingReport(report);
+      await _firestoreService.addParkingReport(report, aiConfidence: confidence);
 
       final spot = ParkingSpot(
         id: uuid,
@@ -175,7 +175,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
         reportedBy: userId,
         reportedAt: now,
         expiresAt: now.add(Duration(minutes: estimatedMinutes)),
-        confidence: confidence,
+        aiConfidence: confidence,
         status: SpotStatus.available,
         photoUrl: photoUrl,
         note: note,

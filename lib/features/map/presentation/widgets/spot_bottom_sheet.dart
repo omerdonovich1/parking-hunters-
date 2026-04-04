@@ -113,8 +113,9 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
   @override
   Widget build(BuildContext context) {
     final spot = widget.spot;
-    final statusColor = _statusColor(spot.status);
+    final statusColor = _statusColor(spot.computedStatus);
     final confidencePercent = (spot.confidence * 100).toInt();
+    final aiPercent = (spot.aiConfidence * 100).toInt();
     final timeColor = _timeRemainingColor(spot.expiresAt);
 
     return Container(
@@ -157,7 +158,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                     border: Border.all(color: statusColor),
                   ),
                   child: Text(
-                    _statusLabel(spot.status),
+                    _statusLabel(spot.computedStatus),
                     style: TextStyle(
                       color: statusColor,
                       fontWeight: FontWeight.bold,
@@ -188,30 +189,43 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
               ],
             ),
             const SizedBox(height: 16),
-            Text(
-              'Confidence Score',
-              style: Theme.of(context).textTheme.titleLarge,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Live Probability', style: Theme.of(context).textTheme.titleLarge),
+                Text(
+                  '$confidencePercent%',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: statusColor, fontSize: 20),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
+            LinearPercentIndicator(
+              percent: spot.confidence.clamp(0.0, 1.0),
+              lineHeight: 14,
+              backgroundColor: Colors.grey.shade200,
+              progressColor: statusColor,
+              barRadius: const Radius.circular(7),
+              padding: EdgeInsets.zero,
+            ),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
-                  child: LinearPercentIndicator(
-                    percent: spot.confidence.clamp(0.0, 1.0),
-                    lineHeight: 12,
-                    backgroundColor: Colors.grey.shade200,
-                    progressColor: statusColor,
-                    barRadius: const Radius.circular(6),
-                    padding: EdgeInsets.zero,
+                  child: _MiniStat(
+                    label: 'AI Scan',
+                    value: '$aiPercent%',
+                    icon: Icons.auto_awesome,
+                    color: Colors.blue,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  '$confidencePercent%',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: statusColor,
-                    fontSize: 16,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _MiniStat(
+                    label: 'Time Factor',
+                    value: _timeRemaining(spot.expiresAt),
+                    icon: Icons.timer_outlined,
+                    color: timeColor,
                   ),
                 ),
               ],
@@ -331,6 +345,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
               ),
             ),
             const SizedBox(height: 10),
+            const SizedBox(height: 4),
             Row(
               children: [
                 Expanded(
@@ -400,6 +415,42 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _MiniStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const _MiniStat({required this.label, required this.value, required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: TextStyle(color: color.withValues(alpha: 0.7), fontSize: 10)),
+                Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

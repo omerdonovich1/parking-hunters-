@@ -9,7 +9,7 @@ import '../core/utils/constants.dart';
 class FirestoreService {
   FirebaseFirestore get _db => FirebaseFirestore.instance;
 
-  Future<String> addParkingReport(ParkingReport report) async {
+  Future<String> addParkingReport(ParkingReport report, {double aiConfidence = 0.7}) async {
     try {
       final docRef = await _db
           .collection(Constants.reportsCollection)
@@ -22,7 +22,7 @@ class FirestoreService {
         reportedBy: report.userId,
         reportedAt: report.createdAt,
         expiresAt: report.estimatedAvailableUntil,
-        confidence: 0.7,
+        aiConfidence: aiConfidence,
         status: SpotStatus.available,
         photoUrl: report.photoUrl,
         note: report.note,
@@ -36,6 +36,23 @@ class FirestoreService {
     } on FirebaseException catch (e) {
       debugPrint('Firestore addParkingReport error: $e');
       return 'mock_${DateTime.now().millisecondsSinceEpoch}';
+    }
+  }
+
+  /// Real-time stream of all active spots (not taken, not expired).
+  Stream<List<ParkingSpot>> watchActiveSpots() {
+    try {
+      return _db
+          .collection(Constants.spotsCollection)
+          .where('status', isNotEqualTo: 'taken')
+          .where('expiresAt', isGreaterThan: Timestamp.now())
+          .snapshots()
+          .map((snap) => snap.docs
+              .map((d) => ParkingSpot.fromMap(d.data(), docId: d.id))
+              .toList());
+    } catch (e) {
+      debugPrint('watchActiveSpots error: $e');
+      return Stream.value([]);
     }
   }
 

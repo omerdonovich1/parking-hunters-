@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum SpotStatus { available, soonAvailable, lowConfidence, taken }
@@ -9,7 +10,9 @@ class ParkingSpot {
   final String reportedBy;
   final DateTime reportedAt;
   final DateTime expiresAt;
-  final double confidence;
+  /// Raw AI confidence score (0.0–1.0). Stored in Firestore, never changes after submission.
+  final double aiConfidence;
+  /// 'taken' if manually marked; otherwise computed from confidence.
   final SpotStatus status;
   final String? photoUrl;
   final String? note;
@@ -22,12 +25,36 @@ class ParkingSpot {
     required this.reportedBy,
     required this.reportedAt,
     required this.expiresAt,
-    required this.confidence,
+    required this.aiConfidence,
     required this.status,
     this.photoUrl,
     this.note,
     this.confirmedCount = 0,
   });
+
+  /// Live confidence = AI score × √(minutesRemaining / totalMinutes).
+  /// Decays smoothly — gentle at first, steep near expiry.
+  /// A high AI score stays green longer; a low score goes red quickly.
+  double get confidence {
+    if (status == SpotStatus.taken) return 0.0;
+    final now = DateTime.now();
+    if (now.isAfter(expiresAt)) return 0.0;
+    final totalSecs = expiresAt.difference(reportedAt).inSeconds.toDouble();
+    final remainingSecs = expiresAt.difference(now).inSeconds.toDouble();
+    if (totalSecs <= 0) return 0.0;
+    final timeDecay = math.sqrt((remainingSecs / totalSecs).clamp(0.0, 1.0));
+    return (aiConfidence * timeDecay).clamp(0.0, 1.0);
+  }
+
+  /// Status derived dynamically from live confidence.
+  SpotStatus get computedStatus {
+    if (status == SpotStatus.taken) return SpotStatus.taken;
+    final c = confidence;
+    if (c <= 0.0) return SpotStatus.taken;
+    if (c >= 0.65) return SpotStatus.available;
+    if (c >= 0.35) return SpotStatus.soonAvailable;
+    return SpotStatus.lowConfidence;
+  }
 
   bool get isExpired =>
       status == SpotStatus.taken || DateTime.now().isAfter(expiresAt);
@@ -40,7 +67,7 @@ class ParkingSpot {
       'reportedBy': reportedBy,
       'reportedAt': Timestamp.fromDate(reportedAt),
       'expiresAt': Timestamp.fromDate(expiresAt),
-      'confidence': confidence,
+      'aiConfidence': aiConfidence,
       'status': status.name,
       'photoUrl': photoUrl,
       'note': note,
@@ -75,7 +102,10 @@ class ParkingSpot {
       reportedBy: map['reportedBy'] as String? ?? '',
       reportedAt: parseDateTime(map['reportedAt']),
       expiresAt: parseDateTime(map['expiresAt']),
-      confidence: (map['confidence'] as num?)?.toDouble() ?? 0.5,
+      // Support legacy docs that stored 'confidence' instead of 'aiConfidence'
+      aiConfidence: (map['aiConfidence'] as num?)?.toDouble()
+          ?? (map['confidence'] as num?)?.toDouble()
+          ?? 0.7,
       status: parseStatus(map['status'] as String?),
       photoUrl: map['photoUrl'] as String?,
       note: map['note'] as String?,
@@ -90,7 +120,7 @@ class ParkingSpot {
     String? reportedBy,
     DateTime? reportedAt,
     DateTime? expiresAt,
-    double? confidence,
+    double? aiConfidence,
     SpotStatus? status,
     String? photoUrl,
     String? note,
@@ -103,7 +133,7 @@ class ParkingSpot {
       reportedBy: reportedBy ?? this.reportedBy,
       reportedAt: reportedAt ?? this.reportedAt,
       expiresAt: expiresAt ?? this.expiresAt,
-      confidence: confidence ?? this.confidence,
+      aiConfidence: aiConfidence ?? this.aiConfidence,
       status: status ?? this.status,
       photoUrl: photoUrl ?? this.photoUrl,
       note: note ?? this.note,
