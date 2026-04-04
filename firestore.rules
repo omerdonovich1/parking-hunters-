@@ -21,37 +21,44 @@ service cloud.firestore {
       return request.resource.data.expiresAt > request.time;
     }
 
+    function spotLocationUnchanged() {
+      return request.resource.data.lat == resource.data.lat
+          && request.resource.data.lng == resource.data.lng;
+    }
+
+    function spotReporterUnchanged() {
+      return request.resource.data.reportedBy == resource.data.reportedBy;
+    }
+
     // ── Users ─────────────────────────────────────────────────────────────────
     match /users/{userId} {
-      // Anyone signed in can read public profiles (for leaderboard)
+      // Anyone signed in can read public profiles (leaderboard)
       allow read: if isSignedIn();
 
       // Only the owner can create or update their own profile
       allow create: if isSignedIn() && isOwner(userId);
       allow update: if isSignedIn() && isOwner(userId);
 
-      // No deletes allowed (contact support to delete account)
+      // No deletes
       allow delete: if false;
     }
 
     // ── Parking Spots ─────────────────────────────────────────────────────────
     match /parking_spots/{spotId} {
-      // Anyone signed in can read spots
-      allow read: if isSignedIn();
+      // PUBLIC read — demo mode and unauthenticated users can see spots on map
+      allow read: if true;
 
-      // Only authenticated users can create a spot with a valid status
+      // Only authenticated users can create spots
       allow create: if isSignedIn()
         && isValidSpotStatus()
         && isNotExpired()
         && request.resource.data.reportedBy == request.auth.uid;
 
-      // Authenticated users can update confidence/status (confirm / deny / mark taken)
-      // but cannot change the reporter or location
+      // Authenticated users can update status/confidence/timer.
+      // Location and reporter are immutable after creation.
       allow update: if isSignedIn()
-        && isValidSpotStatus()
-        && request.resource.data.reportedBy == resource.data.reportedBy
-        && request.resource.data.lat == resource.data.lat
-        && request.resource.data.lng == resource.data.lng;
+        && spotLocationUnchanged()
+        && spotReporterUnchanged();
 
       // Only the original reporter can delete their spot
       allow delete: if isSignedIn()
@@ -60,14 +67,14 @@ service cloud.firestore {
 
     // ── Reports ───────────────────────────────────────────────────────────────
     match /reports/{reportId} {
-      // Authenticated users can read all reports
+      // Authenticated users can read reports
       allow read: if isSignedIn();
 
-      // Only the authenticated user can create their own report
+      // Only the authenticated user can file a report under their own uid
       allow create: if isSignedIn()
         && request.resource.data.userId == request.auth.uid;
 
-      // No updates or deletes on raw reports (immutable audit trail)
+      // Reports are immutable audit trail
       allow update, delete: if false;
     }
   }
