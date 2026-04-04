@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:math' as math;
+import 'dart:math';
 import '../models/parking_spot_model.dart';
 import '../models/user_model.dart';
 import '../models/report_model.dart';
+import '../models/road_status_model.dart';
 import '../core/utils/constants.dart';
 
 class FirestoreService {
@@ -257,5 +259,95 @@ class FirestoreService {
       AppUser(id: '4', email: 'd@d.com', displayName: 'CityRoamer', points: 800, level: 3, badgeIds: ['speed_demon'], totalReports: 45, createdAt: now),
       AppUser(id: '5', email: 'e@e.com', displayName: 'Demo Hunter', points: 150, level: 1, badgeIds: ['first_hunter'], totalReports: 12, createdAt: now),
     ];
+  }
+
+  /// Get nearby road status and incidents
+  Stream<List<RoadStatus>> getNearbyRoadStatus(
+    double lat,
+    double lng,
+    double radiusKm,
+  ) {
+    try {
+      final query = _db
+          .collection('road_status')
+          .where('lat', isGreaterThan: lat - radiusKm / 111)
+          .where('lat', isLessThan: lat + radiusKm / 111)
+          .snapshots();
+
+      return query.map((snapshot) {
+        return snapshot.docs
+            .map((doc) => RoadStatus.fromFirestore(doc))
+            .where((status) {
+          // Filter by actual distance (rough Firestore geo query)
+          final distance = _calculateDistance(lat, lng, status.lat, status.lng);
+          return distance <= radiusKm;
+        }).toList();
+      });
+    } on FirebaseException catch (e) {
+      debugPrint('Firestore getNearbyRoadStatus error: $e');
+      return Stream.value([]);
+    } catch (e) {
+      debugPrint('getNearbyRoadStatus error: $e');
+      return Stream.value([]);
+    }
+  }
+
+  /// Report traffic/incident
+  Future<void> reportRoadIncident({
+    required double lat,
+    required double lng,
+    required IncidentType type,
+    required String description,
+    required String userId,
+  }) async {
+    try {
+      final incidentId = _db.collection('road_status').doc().id;
+      final incident = RoadIncident(
+        id: incidentId,
+        description: description,
+        type: type,
+        lat: lat,
+        lng: lng,
+        reportedAt: DateTime.now(),
+        reportedBy: userId,
+      );
+
+      await _db.collection('road_status').add({
+        'lat': lat,
+        'lng': lng,
+        'trafficLevel': 'moderate',
+        'reportCount': 1,
+        'incidents': [incident.toJson()],
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (e) {
+      debugPrint('Firestore reportRoadIncident error: $e');
+    }
+  }
+
+  /// Confirm traffic incident (user confirms existing incident)
+  Future<void> confirmRoadIncident(String roadStatusId) async {
+    try {
+      await _db
+          .collection('road_status')
+          .doc(roadStatusId)
+          .update({
+        'reportCount': FieldValue.increment(1),
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (e) {
+      debugPrint('Firestore confirmRoadIncident error: $e');
+    }
+  }
+
+  double _calculateDistance(double lat1, double lng1, double lat2, double lng2) {
+    const p = 0.017453292519943295; // Math.PI / 180
+    final a = 0.5 -
+        cos((lat2 - lat1) * p) / 2 +
+        cos(lat1 * p) *
+            cos(lat2 * p) *
+            (1 - cos((lng2 - lng1) * p)) /
+            2;
+    return 12742 * asin(sqrt(a)); // 2 * R; R = 6371 km
   }
 }

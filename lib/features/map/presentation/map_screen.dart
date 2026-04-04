@@ -8,8 +8,10 @@ import 'package:latlong2/latlong.dart' hide Path;
 import 'package:go_router/go_router.dart';
 import 'package:geocoding/geocoding.dart';
 import '../../../models/parking_spot_model.dart';
+import '../../../models/road_status_model.dart';
 import '../../../providers/map_provider.dart';
 import '../../../services/location_service.dart';
+import '../../../services/firestore_service.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/theme/app_theme.dart';
 import 'widgets/spot_bottom_sheet.dart';
@@ -33,10 +35,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
   LatLng _currentPosition = const LatLng(Constants.defaultLat, Constants.defaultLng);
   bool _isLoadingLocation = true;
   final LocationService _locationService = LocationService();
+  final FirestoreService _firestoreService = FirestoreService();
 
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
   bool _hunterModeOpen = false;
+  List<RoadStatus> _roadStatus = [];
+  bool _showReportForm = false;
 
   late AnimationController _pulseController;
   Timer? _panDebounceTimer;
@@ -129,6 +134,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
           // Reload nearby spots (uses debounce from _onMapPanned)
           _onMapPanned(position.latitude, position.longitude);
 
+          // Also load road status for this area
+          _loadRoadStatus(position.latitude, position.longitude);
+
           debugPrint('📍 Location updated: ${position.latitude}, ${position.longitude}');
         }
       },
@@ -136,6 +144,25 @@ class _MapScreenState extends ConsumerState<MapScreen>
         debugPrint('❌ Location tracking error: $e');
       },
     );
+  }
+
+  Future<void> _loadRoadStatus(double lat, double lng) async {
+    try {
+      final roadStatusStream = _firestoreService.getNearbyRoadStatus(
+        lat,
+        lng,
+        ref.read(nearbyRadiusProvider),
+      );
+
+      roadStatusStream.listen((roadStatuses) {
+        if (mounted) {
+          setState(() => _roadStatus = roadStatuses);
+          debugPrint('📍 Road status loaded: ${roadStatuses.length} items');
+        }
+      });
+    } catch (e) {
+      debugPrint('❌ Road status error: $e');
+    }
   }
 
   Future<void> _searchAddress(String address) async {
@@ -320,6 +347,70 @@ class _MapScreenState extends ConsumerState<MapScreen>
             ),
           ),
 
+          // ── Road Status Panel ──────────────────────────────────────────────
+          if (_roadStatus.isNotEmpty)
+            Positioned(
+              top: 130,
+              left: 16,
+              right: 88,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _roadStatus.map((status) {
+                    final color = status.trafficLevel == TrafficLevel.light
+                        ? AppTheme.neonGreen
+                        : status.trafficLevel == TrafficLevel.moderate
+                            ? AppTheme.neonYellow
+                            : AppTheme.neonRed;
+
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: GestureDetector(
+                        onTap: () => _mapController.move(
+                            LatLng(status.lat, status.lng), 16),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: BackdropFilter(
+                            filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: color.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                    color: color.withValues(alpha: 0.6),
+                                    width: 1),
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    status.trafficLevel.name.toUpperCase(),
+                                    style: TextStyle(
+                                      color: color,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  if (status.incidents.isNotEmpty)
+                                    Text(
+                                      '⚠️ ${status.incidents.length}',
+                                      style: TextStyle(
+                                          color: color, fontSize: 9),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+
           // ── Right side: Hunter button ──────────────────────────────────────
           Positioned(
             right: 16,
@@ -334,6 +425,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   ).animate(onPlay: (c) => c.repeat(reverse: true))
                       .scaleXY(begin: 1.0, end: 1.06, duration: 1200.ms, curve: Curves.easeInOut),
                   const SizedBox(height: 16),
+                  _SideIconButton(
+                    icon: Icons.warning_rounded,
+                    onTap: () => setState(() => _showReportForm = !_showReportForm),
+                  ),
+                  const SizedBox(height: 12),
                   _SideIconButton(
                     icon: Icons.my_location_rounded,
                     onTap: () => _mapController.move(_currentPosition, 15),
@@ -384,6 +480,32 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     ),
                   ),
                 ),
+              ),
+            ),
+
+          // ── Report Incident Form ───────────────────────────────────────────
+          if (_showReportForm)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: _ReportIncidentForm(
+                currentLat: _currentPosition.latitude,
+                currentLng: _currentPosition.longitude,
+                onSubmit: (type, description) {
+                  _firestoreService.reportRoadIncident(
+                    lat: _currentPosition.latitude,
+                    lng: _currentPosition.longitude,
+                    type: type,
+                    description: description,
+                    userId: 'user123', // TODO: Get from auth
+                  );
+                  setState(() => _showReportForm = false);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Report submitted! Thank you.')),
+                  );
+                },
+                onClose: () => setState(() => _showReportForm = false),
               ),
             ),
         ],
@@ -713,6 +835,139 @@ class _SideIconButton extends StatelessWidget {
               border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
             ),
             child: Icon(icon, color: Colors.white70, size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Report Incident Form Widget ────────────────────────────────────────
+class _ReportIncidentForm extends StatefulWidget {
+  final double currentLat;
+  final double currentLng;
+  final Function(IncidentType, String) onSubmit;
+  final VoidCallback onClose;
+
+  const _ReportIncidentForm({
+    required this.currentLat,
+    required this.currentLng,
+    required this.onSubmit,
+    required this.onClose,
+  });
+
+  @override
+  State<_ReportIncidentForm> createState() => _ReportIncidentFormState();
+}
+
+class _ReportIncidentFormState extends State<_ReportIncidentForm> {
+  late TextEditingController _descriptionController;
+  IncidentType _selectedType = IncidentType.accident;
+
+  @override
+  void initState() {
+    super.initState();
+    _descriptionController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.6),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          padding: EdgeInsets.fromLTRB(
+              16, 20, 16, MediaQuery.of(context).viewInsets.bottom + 20),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Report Issue',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700)),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded,
+                          color: Colors.white60),
+                      onPressed: widget.onClose,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Type selector
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final type in IncidentType.values)
+                      FilterChip(
+                        label: Text(type.name.toUpperCase(),
+                            style: const TextStyle(fontSize: 11)),
+                        selected: _selectedType == type,
+                        selectedColor: AppTheme.orange,
+                        onSelected: (_) =>
+                            setState(() => _selectedType = type),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Description input
+                TextField(
+                  controller: _descriptionController,
+                  maxLines: 3,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Describe the issue...',
+                    hintStyle: const TextStyle(color: Colors.white38),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.05),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.1)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Submit button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.orange,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      if (_descriptionController.text.isNotEmpty) {
+                        widget.onSubmit(_selectedType,
+                            _descriptionController.text);
+                      }
+                    },
+                    child: const Text('Submit Report',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
