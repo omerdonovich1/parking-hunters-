@@ -232,13 +232,13 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
   String _statusLabel(SpotStatus status) {
     switch (status) {
       case SpotStatus.available:
-        return '🟢 Available';
+        return 'Available';
       case SpotStatus.soonAvailable:
-        return '🟡 Soon Available';
+        return 'Soon Available';
       case SpotStatus.lowConfidence:
-        return '🔴 Low Confidence';
+        return 'Low Confidence';
       case SpotStatus.taken:
-        return '⛔ Taken';
+        return 'Taken';
     }
   }
 
@@ -317,12 +317,26 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: statusColor),
                   ),
-                  child: Text(
-                    _statusLabel(spot.computedStatus),
-                    style: TextStyle(
-                      color: statusColor,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: statusColor,
+                          boxShadow: [
+                            BoxShadow(color: statusColor, blurRadius: 6, spreadRadius: 1),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 7),
+                      Text(
+                        _statusLabel(spot.computedStatus),
+                        style: TextStyle(color: statusColor, fontWeight: FontWeight.bold),
+                      ),
+                    ],
                   ),
                 ),
                 Container(
@@ -348,24 +362,41 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Live Probability', style: Theme.of(context).textTheme.titleLarge),
-                Text(
-                  '$confidencePercent%',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: statusColor, fontSize: 20),
-                ),
-              ],
+            const SizedBox(height: 20),
+            // ── Hero confidence number ─────────────────────────────────────
+            Center(
+              child: Column(
+                children: [
+                  Text(
+                    '$confidencePercent%',
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 58,
+                      fontWeight: FontWeight.w900,
+                      height: 1.0,
+                      letterSpacing: -2,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'LIVE CONFIDENCE',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.35),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             LinearPercentIndicator(
               percent: spot.confidence.clamp(0.0, 1.0),
-              lineHeight: 14,
-              backgroundColor: Colors.white.withValues(alpha: 0.1),
+              lineHeight: 8,
+              backgroundColor: Colors.white.withValues(alpha: 0.08),
               progressColor: statusColor,
-              barRadius: const Radius.circular(7),
+              barRadius: const Radius.circular(4),
               padding: EdgeInsets.zero,
             ),
             const SizedBox(height: 12),
@@ -376,7 +407,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
                     label: 'AI Scan',
                     value: '$aiPercent%',
                     icon: Icons.auto_awesome,
-                    color: Colors.blue,
+                    color: AppTheme.orange,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -393,7 +424,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
             const SizedBox(height: 16),
             Row(
               children: [
-                Icon(Icons.access_time, size: 16, color: Colors.grey.shade600),
+                Icon(Icons.access_time, size: 16, color: Colors.white30),
                 const SizedBox(width: 6),
                 Text(
                   'Reported ${_timeAgo(spot.reportedAt)}',
@@ -406,7 +437,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.notes, size: 16, color: Colors.grey.shade600),
+                  Icon(Icons.notes, size: 16, color: Colors.white30),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(

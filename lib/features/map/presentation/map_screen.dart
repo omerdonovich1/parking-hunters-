@@ -538,8 +538,8 @@ class _SpotMarker extends StatelessWidget {
           children: [
             // Outer pulse ring
             Container(
-              width: 60,
-              height: 60,
+              width: 50,
+              height: 50,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: color.withValues(alpha: 0.05),
@@ -548,8 +548,8 @@ class _SpotMarker extends StatelessWidget {
             ),
             // Main blip circle
             Container(
-              width: 48,
-              height: 48,
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: color.withValues(alpha: 0.12),

@@ -887,31 +887,45 @@ class _GlassCard extends StatelessWidget {
   }
 }
 
-class _OrangeButton extends StatelessWidget {
+class _OrangeButton extends StatefulWidget {
   final VoidCallback? onTap;
   final Widget child;
 
   const _OrangeButton({required this.onTap, required this.child});
 
   @override
+  State<_OrangeButton> createState() => _OrangeButtonState();
+}
+
+class _OrangeButtonState extends State<_OrangeButton> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    final enabled = onTap != null;
+    final enabled = widget.onTap != null;
     return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        height: 54,
-        decoration: BoxDecoration(
-          gradient: enabled
-              ? const LinearGradient(colors: [AppTheme.energy, Color(0xFFBB0055)])
-              : null,
-          color: enabled ? null : Colors.white.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: enabled
-              ? [BoxShadow(color: AppTheme.energy.withValues(alpha: 0.45), blurRadius: 18, offset: const Offset(0, 6))]
-              : [],
+      onTap: widget.onTap,
+      onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+      onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+      onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+      child: AnimatedScale(
+        scale: _pressed ? 0.97 : 1.0,
+        duration: const Duration(milliseconds: 90),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          height: 54,
+          decoration: BoxDecoration(
+            gradient: enabled
+                ? const LinearGradient(colors: [AppTheme.energy, Color(0xFFBB0055)])
+                : null,
+            color: enabled ? null : Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: enabled
+                ? [BoxShadow(color: AppTheme.energy.withValues(alpha: _pressed ? 0.25 : 0.45), blurRadius: _pressed ? 8 : 18, offset: const Offset(0, 6))]
+                : [],
+          ),
+          child: Center(child: widget.child),
         ),
-        child: Center(child: child),
       ),
     );
   }
