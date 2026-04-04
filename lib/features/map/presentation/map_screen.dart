@@ -1,5 +1,7 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +14,50 @@ import '../../../core/utils/constants.dart';
 import '../../../core/theme/app_theme.dart';
 import 'widgets/spot_bottom_sheet.dart';
 import 'widgets/map_filter_bar.dart';
+
+// ── Cluster model ────────────────────────────────────────────────────────────
+class _Cluster {
+  final List<ParkingSpot> spots;
+  _Cluster(this.spots);
+
+  LatLng get center {
+    final lat = spots.map((s) => s.lat).reduce((a, b) => a + b) / spots.length;
+    final lng = spots.map((s) => s.lng).reduce((a, b) => a + b) / spots.length;
+    return LatLng(lat, lng);
+  }
+
+  // Dominant color = most common status
+  SpotStatus get dominantStatus {
+    final counts = <SpotStatus, int>{};
+    for (final s in spots) {
+      counts[s.computedStatus] = (counts[s.computedStatus] ?? 0) + 1;
+    }
+    return counts.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+  }
+}
+
+/// Groups spots into clusters. Radius shrinks as zoom increases.
+List<_Cluster> _buildClusters(List<ParkingSpot> spots, double zoom) {
+  // At zoom 15+ show individual markers (cluster radius effectively 0)
+  final radiusDeg = zoom >= 15 ? 0.0 : 0.003 * math.pow(2, 14 - zoom);
+  final clusters = <_Cluster>[];
+
+  for (final spot in spots) {
+    bool merged = false;
+    for (final cluster in clusters) {
+      final c = cluster.center;
+      final dlat = (spot.lat - c.latitude).abs();
+      final dlng = (spot.lng - c.longitude).abs();
+      if (dlat < radiusDeg && dlng < radiusDeg) {
+        cluster.spots.add(spot);
+        merged = true;
+        break;
+      }
+    }
+    if (!merged) clusters.add(_Cluster([spot]));
+  }
+  return clusters;
+}
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -30,6 +76,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
   bool _hunterModeOpen = false;
+  double _currentZoom = 15;
 
   late AnimationController _pulseController;
 
@@ -60,9 +107,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         _isLoadingLocation = false;
       });
       _mapController.move(latlng, 15);
-      ref.read(parkingSpotsProvider.notifier)
-          .loadNearbySpots(position.latitude, position.longitude,
-              radiusKm: ref.read(nearbyRadiusProvider));
+      // Firestore stream auto-loads all active spots — no manual fetch needed.
     } catch (e) {
       if (mounted) setState(() => _isLoadingLocation = false);
     }
@@ -111,6 +156,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
               initialZoom: 15,
               maxZoom: 19,
               minZoom: 10,
+              onPositionChanged: (pos, _) {
+                if (pos.zoom != null && pos.zoom != _currentZoom) {
+                  setState(() => _currentZoom = pos.zoom!);
+                }
+              },
             ),
             children: [
               // Dark-styled OSM tiles
@@ -120,23 +170,37 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 userAgentPackageName: 'com.example.parking_hunter',
                 retinaMode: true,
               ),
-              // Parking spot markers
+              // Parking spot markers — clustered by zoom level
               MarkerLayer(
-                markers: visible.map((spot) {
-                  final color = _spotColor(spot.status);
-                  return Marker(
-                    point: LatLng(spot.lat, spot.lng),
-                    width: 80,
-                    height: 56,
-                    child: GestureDetector(
-                      onTap: () => _showSpotSheet(spot),
-                      child: _SpotMarker(
-                        spot: spot,
-                        color: color,
-                        timeAgo: _timeAgo(spot.reportedAt),
+                markers: _buildClusters(visible, _currentZoom).map((cluster) {
+                  if (cluster.spots.length == 1) {
+                    final spot = cluster.spots.first;
+                    final color = _spotColor(spot.computedStatus);
+                    return Marker(
+                      point: LatLng(spot.lat, spot.lng),
+                      width: 68,
+                      height: 76,
+                      child: GestureDetector(
+                        onTap: () { HapticFeedback.selectionClick(); _showSpotSheet(spot); },
+                        child: _SpotMarker(
+                          spot: spot,
+                          color: color,
+                          timeAgo: _timeAgo(spot.reportedAt),
+                        ),
                       ),
-                    ),
-                  );
+                    );
+                  } else {
+                    final color = _spotColor(cluster.dominantStatus);
+                    return Marker(
+                      point: cluster.center,
+                      width: 56,
+                      height: 56,
+                      child: GestureDetector(
+                        onTap: () { HapticFeedback.lightImpact(); _mapController.move(cluster.center, _currentZoom + 2); },
+                        child: _ClusterMarker(count: cluster.spots.length, color: color),
+                      ),
+                    );
+                  }
                 }).toList(),
               ),
               // Current location dot
@@ -192,7 +256,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   _HunterSideButton(
                     onTap: () => context.go('/report'),
                   ).animate(onPlay: (c) => c.repeat(reverse: true))
-                      .scaleXY(begin: 1.0, end: 1.06, duration: 1200.ms, curve: Curves.easeInOut),
+                      .scaleXY(begin: 1.0, end: 1.1, duration: 1000.ms, curve: Curves.easeInOut),
                   const SizedBox(height: 16),
                   _SideIconButton(
                     icon: Icons.my_location_rounded,
@@ -254,12 +318,72 @@ class _MapScreenState extends ConsumerState<MapScreen>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => SpotBottomSheet(spot: spot),
+      enableDrag: true,
+      useSafeArea: false,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.55,
+        minChildSize: 0.3,
+        maxChildSize: 0.92,
+        snap: true,
+        snapSizes: const [0.55, 0.92],
+        builder: (_, scrollController) =>
+            SpotBottomSheet(spot: spot, scrollController: scrollController),
+      ),
     );
   }
 }
 
-// ── Premium spot marker ──────────────────────────────────────────────────────
+// ── Cluster marker — radar sweep style ──────────────────────────────────────
+class _ClusterMarker extends StatelessWidget {
+  final int count;
+  final Color color;
+  const _ClusterMarker({required this.count, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // Outer glow ring
+        Container(
+          width: 58,
+          height: 58,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: color.withValues(alpha: 0.06),
+            border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
+          ),
+        ),
+        // Inner filled circle
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: color.withValues(alpha: 0.14),
+            border: Border.all(color: color, width: 2),
+            boxShadow: [
+              BoxShadow(color: color.withValues(alpha: 0.7), blurRadius: 20, spreadRadius: 3),
+              BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 40, spreadRadius: 6),
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '$count',
+                style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w900, height: 1.1),
+              ),
+              Text('🅿️', style: const TextStyle(fontSize: 9)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Spot marker — radar blip HUD ─────────────────────────────────────────────
 class _SpotMarker extends StatelessWidget {
   final ParkingSpot spot;
   final Color color;
@@ -273,26 +397,61 @@ class _SpotMarker extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: color.withValues(alpha: 0.6), width: 1.5),
-            boxShadow: [BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 12)],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(conf, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w900)),
-              Text(timeAgo, style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 9, fontWeight: FontWeight.w600)),
-            ],
-          ),
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            // Outer pulse ring
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withValues(alpha: 0.05),
+                border: Border.all(color: color.withValues(alpha: 0.25), width: 1),
+              ),
+            ),
+            // Main blip circle
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withValues(alpha: 0.12),
+                border: Border.all(color: color, width: 2.5),
+                boxShadow: [
+                  BoxShadow(color: color.withValues(alpha: 0.75), blurRadius: 18, spreadRadius: 3),
+                  BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 36, spreadRadius: 6),
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    conf,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      height: 1.1,
+                    ),
+                  ),
+                  Text(
+                    timeAgo,
+                    style: TextStyle(
+                      color: color.withValues(alpha: 0.75),
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         // Pointer tip
         CustomPaint(
-          size: const Size(10, 6),
-          painter: _TipPainter(color: color.withValues(alpha: 0.6)),
+          size: const Size(10, 7),
+          painter: _TipPainter(color: color),
         ),
       ],
     );
@@ -507,7 +666,7 @@ class _GlassFilterBar extends ConsumerWidget {
   }
 }
 
-// ── Side Hunter button ───────────────────────────────────────────────────────
+// ── Side Hunter button — mission-critical CTA ────────────────────────────────
 class _HunterSideButton extends StatelessWidget {
   final VoidCallback onTap;
   const _HunterSideButton({required this.onTap});
@@ -515,22 +674,24 @@ class _HunterSideButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: () { HapticFeedback.heavyImpact(); onTap(); },
       child: Container(
-        width: 52,
-        height: 52,
+        width: 60,
+        height: 60,
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [AppTheme.orange, Color(0xFFFF3D00)],
+            colors: [AppTheme.energy, Color(0xFFBB0055)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           shape: BoxShape.circle,
           boxShadow: [
-            BoxShadow(color: AppTheme.orange.withValues(alpha: 0.5), blurRadius: 20, spreadRadius: 2),
+            BoxShadow(color: AppTheme.energy.withValues(alpha: 0.75), blurRadius: 28, spreadRadius: 4),
+            BoxShadow(color: AppTheme.energy.withValues(alpha: 0.4), blurRadius: 52, spreadRadius: 8),
           ],
+          border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.5),
         ),
-        child: const Icon(Icons.add_location_alt_rounded, color: Colors.white, size: 26),
+        child: const Icon(Icons.add_location_alt_rounded, color: Colors.white, size: 28),
       ),
     );
   }

@@ -47,6 +47,7 @@ google-services.json
 GoogleService-Info.plist
 
 # Environment / secrets
+lib/core/config/app_config.dart
 .env
 .env.*
 lib/core/config/secrets.dart

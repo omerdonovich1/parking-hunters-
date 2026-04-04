@@ -9,7 +9,7 @@ import '../core/utils/constants.dart';
 class FirestoreService {
   FirebaseFirestore get _db => FirebaseFirestore.instance;
 
-  Future<String> addParkingReport(ParkingReport report) async {
+  Future<String> addParkingReport(ParkingReport report, {double aiConfidence = 0.7}) async {
     try {
       final docRef = await _db
           .collection(Constants.reportsCollection)
@@ -22,7 +22,7 @@ class FirestoreService {
         reportedBy: report.userId,
         reportedAt: report.createdAt,
         expiresAt: report.estimatedAvailableUntil,
-        confidence: 0.7,
+        aiConfidence: aiConfidence,
         status: SpotStatus.available,
         photoUrl: report.photoUrl,
         note: report.note,
@@ -36,6 +36,61 @@ class FirestoreService {
     } on FirebaseException catch (e) {
       debugPrint('Firestore addParkingReport error: $e');
       return 'mock_${DateTime.now().millisecondsSinceEpoch}';
+    }
+  }
+
+  /// Real-time stream of all active spots.
+  /// Single-field query (no composite index needed).
+  /// Taken spots and expired spots are filtered client-side.
+  Stream<List<ParkingSpot>> watchActiveSpots() {
+    try {
+      return _db
+          .collection(Constants.spotsCollection)
+          .where('expiresAt', isGreaterThan: Timestamp.now())
+          .snapshots()
+          .map((snap) => snap.docs
+              .map((d) => ParkingSpot.fromMap(d.data(), docId: d.id))
+              .where((spot) => spot.status != SpotStatus.taken)
+              .toList());
+    } catch (e) {
+      debugPrint('watchActiveSpots error: $e');
+      return Stream.value([]);
+    }
+  }
+
+  /// Resets the timer on an existing spot (deduplication).
+  Future<void> refreshSpot(String spotId, {int minutes = 60}) async {
+    try {
+      await _db.collection(Constants.spotsCollection).doc(spotId).update({
+        'expiresAt': Timestamp.fromDate(DateTime.now().add(Duration(minutes: minutes))),
+        'status': 'available',
+      });
+    } on FirebaseException catch (e) {
+      debugPrint('Firestore refreshSpot error: $e');
+    }
+  }
+
+  /// Returns the first active spot within [radiusMeters] of the given location, or null.
+  Future<ParkingSpot?> findNearbyActiveSpot(double lat, double lng, {double radiusMeters = 30}) async {
+    try {
+      final latDelta = radiusMeters / 111000.0;
+      final lngDelta = radiusMeters / (111000.0 * math.cos(lat * math.pi / 180));
+      final snap = await _db
+          .collection(Constants.spotsCollection)
+          .where('lat', isGreaterThan: lat - latDelta)
+          .where('lat', isLessThan: lat + latDelta)
+          .where('expiresAt', isGreaterThan: Timestamp.now())
+          .get();
+      for (final doc in snap.docs) {
+        final spot = ParkingSpot.fromMap(doc.data(), docId: doc.id);
+        if (spot.status == SpotStatus.taken) continue;
+        final dLng = (spot.lng - lng).abs();
+        if (dLng <= lngDelta) return spot;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('findNearbyActiveSpot error: $e');
+      return null;
     }
   }
 
@@ -77,7 +132,7 @@ class FirestoreService {
         reportedBy: 'mock_user',
         reportedAt: now.subtract(const Duration(minutes: 5)),
         expiresAt: now.add(const Duration(minutes: 55)),
-        confidence: 0.9,
+        aiConfidence: 0.9,
         status: SpotStatus.available,
         note: 'Near the corner',
       ),
@@ -88,7 +143,7 @@ class FirestoreService {
         reportedBy: 'mock_user2',
         reportedAt: now.subtract(const Duration(minutes: 20)),
         expiresAt: now.add(const Duration(minutes: 40)),
-        confidence: 0.6,
+        aiConfidence: 0.6,
         status: SpotStatus.soonAvailable,
         note: 'Blue zone',
       ),
@@ -99,7 +154,7 @@ class FirestoreService {
         reportedBy: 'mock_user3',
         reportedAt: now.subtract(const Duration(minutes: 40)),
         expiresAt: now.add(const Duration(minutes: 20)),
-        confidence: 0.3,
+        aiConfidence: 0.3,
         status: SpotStatus.lowConfidence,
       ),
       ParkingSpot(
@@ -109,7 +164,7 @@ class FirestoreService {
         reportedBy: 'mock_user4',
         reportedAt: now.subtract(const Duration(minutes: 10)),
         expiresAt: now.add(const Duration(minutes: 50)),
-        confidence: 0.85,
+        aiConfidence: 0.85,
         status: SpotStatus.available,
         note: 'Free parking',
       ),
@@ -120,7 +175,7 @@ class FirestoreService {
         reportedBy: 'mock_user5',
         reportedAt: now.subtract(const Duration(minutes: 15)),
         expiresAt: now.add(const Duration(minutes: 45)),
-        confidence: 0.75,
+        aiConfidence: 0.75,
         status: SpotStatus.available,
         note: 'Street parking',
       ),

@@ -5,46 +5,54 @@ import '../models/report_model.dart';
 import '../models/parking_spot_model.dart';
 import '../services/firestore_service.dart';
 import '../services/storage_service.dart';
+import '../services/ai_scan_service.dart';
 import 'demo_provider.dart';
 import 'map_provider.dart';
 import 'profile_provider.dart';
 import 'auth_provider.dart';
 
-final storageServiceProvider = Provider<StorageService>((ref) {
-  return StorageService();
-});
+final storageServiceProvider = Provider<StorageService>((ref) => StorageService());
+final aiScanServiceProvider = Provider<AiScanService>((ref) => AiScanService());
 
 class ReportState {
   final bool isLoading;
+  final bool isScanning; // AI scan in progress
   final bool isSuccess;
   final String? error;
   final String? selectedImagePath;
-  final String? newBadgeId; // set when a badge is unlocked on submit
+  final AiScanResult? aiScanResult;
+  final String? newBadgeId;
 
   const ReportState({
     this.isLoading = false,
+    this.isScanning = false,
     this.isSuccess = false,
     this.error,
     this.selectedImagePath,
+    this.aiScanResult,
     this.newBadgeId,
   });
 
   ReportState copyWith({
     bool? isLoading,
+    bool? isScanning,
     bool? isSuccess,
     String? error,
     String? selectedImagePath,
+    AiScanResult? aiScanResult,
     String? newBadgeId,
     bool clearError = false,
     bool clearImage = false,
+    bool clearScanResult = false,
     bool clearBadge = false,
   }) {
     return ReportState(
       isLoading: isLoading ?? this.isLoading,
+      isScanning: isScanning ?? this.isScanning,
       isSuccess: isSuccess ?? this.isSuccess,
       error: clearError ? null : (error ?? this.error),
-      selectedImagePath:
-          clearImage ? null : (selectedImagePath ?? this.selectedImagePath),
+      selectedImagePath: clearImage ? null : (selectedImagePath ?? this.selectedImagePath),
+      aiScanResult: clearScanResult ? null : (aiScanResult ?? this.aiScanResult),
       newBadgeId: clearBadge ? null : (newBadgeId ?? this.newBadgeId),
     );
   }
@@ -53,13 +61,18 @@ class ReportState {
 class ReportNotifier extends StateNotifier<ReportState> {
   final FirestoreService _firestoreService;
   final StorageService _storageService;
+  final AiScanService _aiScanService;
   final Ref _ref;
   final ImagePicker _imagePicker = ImagePicker();
 
-  ReportNotifier(this._firestoreService, this._storageService, this._ref)
-      : super(const ReportState());
+  ReportNotifier(
+    this._firestoreService,
+    this._storageService,
+    this._aiScanService,
+    this._ref,
+  ) : super(const ReportState());
 
-  Future<void> pickImage({bool fromCamera = false}) async {
+  Future<void> pickImage({bool fromCamera = true}) async {
     try {
       final XFile? image = await _imagePicker.pickImage(
         source: fromCamera ? ImageSource.camera : ImageSource.gallery,
@@ -68,26 +81,42 @@ class ReportNotifier extends StateNotifier<ReportState> {
         imageQuality: 85,
       );
       if (image != null) {
-        state = state.copyWith(selectedImagePath: image.path);
+        // Clear previous scan result when new photo is taken
+        state = state.copyWith(
+          selectedImagePath: image.path,
+          clearScanResult: true,
+          clearError: true,
+        );
       }
     } catch (e) {
       state = state.copyWith(error: 'Failed to pick image: $e');
     }
   }
 
+  /// Sends the photo to Claude Vision and returns the result.
+  /// Automatically updates state with isScanning + aiScanResult.
+  Future<AiScanResult?> scanWithAI() async {
+    if (state.selectedImagePath == null) return null;
+    state = state.copyWith(isScanning: true, clearError: true);
+    final result = await _aiScanService.scanParkingPhoto(state.selectedImagePath!);
+    state = state.copyWith(isScanning: false, aiScanResult: result, error: result.reason.contains('key not configured') || result.reason.contains('Could not reach') || result.reason.contains('failed') ? result.reason : null);
+    return result;
+  }
+
   Future<void> submitReport({
     required double lat,
     required double lng,
     String? note,
-    required int estimatedMinutes,
+    int estimatedMinutes = 60,
   }) async {
     state = state.copyWith(isLoading: true, clearError: true);
 
-    // Demo mode: simulate a successful submission without hitting Firebase
+    // Demo mode — simulate success without hitting Firebase
     if (_ref.read(demoModeProvider)) {
       await Future.delayed(const Duration(milliseconds: 800));
       final now = DateTime.now();
       final uuid = const Uuid().v4();
+      final confidence = state.aiScanResult?.confidence ?? 70;
       final spot = ParkingSpot(
         id: uuid,
         lat: lat,
@@ -95,24 +124,33 @@ class ReportNotifier extends StateNotifier<ReportState> {
         reportedBy: 'demo_user',
         reportedAt: now,
         expiresAt: now.add(Duration(minutes: estimatedMinutes)),
-        confidence: 0.7,
+        aiConfidence: confidence / 100.0,
         status: SpotStatus.available,
         note: note,
-        confirmedCount: 0,
       );
       _ref.read(parkingSpotsProvider.notifier).addSpot(spot);
       await _ref.read(userProfileProvider.notifier).updatePoints(10);
       await _ref.read(userProfileProvider.notifier).incrementReports();
-      state = state.copyWith(isLoading: false, isSuccess: true, clearImage: true);
+      state = state.copyWith(isLoading: false, isSuccess: true, clearImage: true, clearScanResult: true);
       return;
     }
 
     try {
       final userId = _ref.read(currentUserProvider)?.uid ?? 'anonymous';
       final now = DateTime.now();
+
+      // Deduplication — if an active spot exists within 30m, refresh its timer instead
+      final nearby = await _firestoreService.findNearbyActiveSpot(lat, lng);
+      if (nearby != null) {
+        await _firestoreService.refreshSpot(nearby.id, minutes: estimatedMinutes);
+        await _ref.read(userProfileProvider.notifier).updatePoints(5);
+        state = state.copyWith(isLoading: false, isSuccess: true, clearImage: true, clearScanResult: true);
+        return;
+      }
+
       final uuid = const Uuid().v4();
 
-      // Upload photo if one was selected
+      // Upload photo
       String? photoUrl;
       if (state.selectedImagePath != null) {
         photoUrl = await _storageService.uploadSpotPhoto(
@@ -121,6 +159,8 @@ class ReportNotifier extends StateNotifier<ReportState> {
           localFilePath: state.selectedImagePath!,
         );
       }
+
+      final confidence = (state.aiScanResult?.confidence ?? 70) / 100.0;
 
       final report = ParkingReport(
         id: uuid,
@@ -136,7 +176,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
         deniedCount: 0,
       );
 
-      await _firestoreService.addParkingReport(report);
+      await _firestoreService.addParkingReport(report, aiConfidence: confidence);
 
       final spot = ParkingSpot(
         id: uuid,
@@ -145,11 +185,10 @@ class ReportNotifier extends StateNotifier<ReportState> {
         reportedBy: userId,
         reportedAt: now,
         expiresAt: now.add(Duration(minutes: estimatedMinutes)),
-        confidence: 0.7,
+        aiConfidence: confidence,
         status: SpotStatus.available,
         photoUrl: photoUrl,
         note: note,
-        confirmedCount: 0,
       );
       _ref.read(parkingSpotsProvider.notifier).addSpot(spot);
 
@@ -157,38 +196,30 @@ class ReportNotifier extends StateNotifier<ReportState> {
       await _ref.read(userProfileProvider.notifier).updatePoints(10);
       await _ref.read(userProfileProvider.notifier).incrementReports();
       final badgesAfter = _ref.read(userProfileProvider)?.badgeIds ?? [];
-
-      // Detect newly unlocked badge
-      final newBadge = badgesAfter
-          .where((id) => !badgesBefore.contains(id))
-          .firstOrNull;
+      final newBadge = badgesAfter.where((id) => !badgesBefore.contains(id)).firstOrNull;
 
       state = state.copyWith(
         isLoading: false,
         isSuccess: true,
         clearImage: true,
+        clearScanResult: true,
         newBadgeId: newBadge,
       );
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: 'Failed to submit report: $e',
-      );
+      state = state.copyWith(isLoading: false, error: 'Failed to submit: $e');
     }
   }
 
-  void clearImage() {
-    state = state.copyWith(clearImage: true);
-  }
+  void clearImage() => state = state.copyWith(clearImage: true, clearScanResult: true);
 
-  void reset() {
-    state = const ReportState();
-  }
+  void reset() => state = const ReportState();
 }
 
-final reportProvider =
-    StateNotifierProvider<ReportNotifier, ReportState>((ref) {
-  final firestoreService = ref.watch(firestoreServiceProvider);
-  final storageService = ref.watch(storageServiceProvider);
-  return ReportNotifier(firestoreService, storageService, ref);
+final reportProvider = StateNotifierProvider<ReportNotifier, ReportState>((ref) {
+  return ReportNotifier(
+    ref.watch(firestoreServiceProvider),
+    ref.watch(storageServiceProvider),
+    ref.watch(aiScanServiceProvider),
+    ref,
+  );
 });

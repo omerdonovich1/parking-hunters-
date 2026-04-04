@@ -4,19 +4,26 @@ import 'package:flutter/services.dart';
 class AppTheme {
   AppTheme._();
 
-  // ── Brand palette ──────────────────────────────────────────────────────────
-  static const Color orange      = Color(0xFFFF6B35);
-  static const Color orangeGlow  = Color(0xFFFF8C5A);
-  static const Color neonGreen   = Color(0xFF00E676);
-  static const Color neonYellow  = Color(0xFFFFD600);
-  static const Color neonRed     = Color(0xFFFF1744);
+  // ── Cyber-hunter palette — 2026 game aesthetic ─────────────────────────────
+  // Primary: electric cyan — radar, scan, info HUD, map badges
+  static const Color orange      = Color(0xFF00D4FF);  // electric cyan (legacy name kept)
+  static const Color orangeGlow  = Color(0xFF60EEFF);  // lighter cyan highlight
 
-  // ── Dark surfaces ──────────────────────────────────────────────────────────
-  static const Color bg          = Color(0xFF080B14);   // deep space
-  static const Color surface     = Color(0xFF0D1117);
-  static const Color card        = Color(0xFF111827);
-  static const Color cardBorder  = Color(0xFF1F2937);
-  static const Color divider     = Color(0xFF1A2236);
+  // Hunter action: hot magenta — CTAs, Hunt button, I Parked Here
+  static const Color energy      = Color(0xFFFF2D78);
+  static const Color energyGlow  = Color(0xFFFF6FAC);
+
+  // Status neons
+  static const Color neonGreen   = Color(0xFF00FF88);  // available — electric lime
+  static const Color neonYellow  = Color(0xFFFFD700);  // soon — gold
+  static const Color neonRed     = Color(0xFFFF3366);  // danger — hot red
+
+  // ── Deep space surfaces ────────────────────────────────────────────────────
+  static const Color bg          = Color(0xFF030814);  // abyss navy
+  static const Color surface     = Color(0xFF071020);
+  static const Color card        = Color(0xFF0C1A30);
+  static const Color cardBorder  = Color(0xFF1C3558);
+  static const Color divider     = Color(0xFF0F2038);
 
   // ── Light surfaces ─────────────────────────────────────────────────────────
   static const Color bgLight     = Color(0xFFF0F4FF);
@@ -24,10 +31,10 @@ class AppTheme {
   static const Color cardLight   = Color(0xFFFFFFFF);
 
   // keep backward compat
-  static const Color primaryColor  = orange;
+  static const Color primaryColor   = orange;
   static const Color secondaryColor = neonGreen;
-  static const Color surfaceDark   = bg;
-  static const Color cardDark      = card;
+  static const Color surfaceDark    = bg;
+  static const Color cardDark       = card;
 
   // ── Glassmorphism helpers ──────────────────────────────────────────────────
   static BoxDecoration glassCard({double opacity = 0.06, double radius = 20}) =>
@@ -44,9 +51,23 @@ class AppTheme {
         border: Border.all(color: cardBorder, width: 1),
       );
 
+  // Action gradient — magenta (primary CTAs)
   static BoxDecoration orangeGradient({double radius = 16}) => BoxDecoration(
     gradient: const LinearGradient(
-      colors: [orange, Color(0xFFFF3D00)],
+      colors: [energy, Color(0xFFBB0055)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    ),
+    borderRadius: BorderRadius.circular(radius),
+    boxShadow: [
+      BoxShadow(color: energy.withValues(alpha: 0.5), blurRadius: 22, offset: const Offset(0, 8)),
+    ],
+  );
+
+  // Cyan gradient — scan / navigate
+  static BoxDecoration cyanGradient({double radius = 16}) => BoxDecoration(
+    gradient: const LinearGradient(
+      colors: [orange, Color(0xFF007799)],
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
     ),
@@ -88,7 +109,7 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: orange,
+          backgroundColor: energy,
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -115,7 +136,7 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFF111827),
+        fillColor: surface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: cardBorder),
@@ -135,21 +156,21 @@ class AppTheme {
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: Colors.transparent,
         selectedItemColor: orange,
-        unselectedItemColor: Color(0xFF4B5563),
+        unselectedItemColor: Color(0xFF2A4A6A),
         elevation: 0,
         type: BottomNavigationBarType.fixed,
         selectedLabelStyle: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
         unselectedLabelStyle: TextStyle(fontSize: 11),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: orange,
+        backgroundColor: energy,
         foregroundColor: Colors.white,
         elevation: 0,
         shape: CircleBorder(),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: card,
-        selectedColor: orange.withValues(alpha: 0.15),
+        selectedColor: orange.withValues(alpha: 0.18),
         side: const BorderSide(color: cardBorder),
         labelStyle: const TextStyle(fontSize: 12, color: Colors.white),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -178,7 +199,7 @@ class AppTheme {
       brightness: Brightness.light,
       scaffoldBackgroundColor: bgLight,
       colorScheme: ColorScheme.fromSeed(
-        seedColor: orange,
+        seedColor: energy,
         secondary: neonGreen,
         brightness: Brightness.light,
         surface: surfaceLight,
@@ -197,7 +218,7 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: orange,
+          backgroundColor: energy,
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -228,7 +249,7 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: orange,
+        backgroundColor: energy,
         foregroundColor: Colors.white,
         elevation: 0,
         shape: CircleBorder(),
@@ -240,7 +261,7 @@ class AppTheme {
         titleLarge: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF0D1117)),
         bodyLarge: TextStyle(fontSize: 15, color: Color(0xFF374151)),
         bodyMedium: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
-        labelLarge: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: orange),
+        labelLarge: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: energy),
       ),
     );
   }

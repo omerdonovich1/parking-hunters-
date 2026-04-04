@@ -1,4 +1,4 @@
-# 🗺️ Person 2 — Live Map Feature
+# 🗺️ Yarin (P2) — Explorer Journey
 **Branch:** `feature/live-map`
 
 ---
