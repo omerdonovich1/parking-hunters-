@@ -1,10 +1,10 @@
-# 🏆 Omer Gal (P3) — Competitor Journey
+# 🏆 Person 3 — Profile & Gamification
 **Branch:** `feature/profile-gamification`
 
 ---
 
 ## Your Job in One Sentence
-Build everything that makes users **want to keep coming back** — profile screen, XP bar, badges, and a leaderboard.
+Make the app **feel like a game** — build the profile screen, points system, badges, and leaderboard so users are motivated to keep reporting spots.
 
 ---
 
@@ -35,78 +35,75 @@ flutter run
 
 | File | What to build |
 |------|--------------|
-| `lib/features/profile/presentation/profile_screen.dart` | Avatar, XP bar, level, stats, badges grid |
-| `lib/features/leaderboard/presentation/leaderboard_screen.dart` | Top hunters list, weekly ranking |
-| `lib/providers/profile_provider.dart` | User profile state, XP updates |
-| `lib/services/firestore_service.dart` | `getLeaderboard()`, `getUserProfile()` |
-| `lib/models/app_user_model.dart` | User model with points, level, badgeIds |
+| `lib/features/profile/presentation/profile_screen.dart` | Full profile UI |
+| `lib/features/leaderboard/presentation/leaderboard_screen.dart` | Top hunters list |
+| `lib/services/gamification_service.dart` | Points + badge logic |
+| `lib/providers/profile_provider.dart` | State for user profile |
+| `lib/models/user_model.dart` | Add any missing fields |
+| `lib/models/badge_model.dart` | Badge definitions |
 
-**Do NOT touch these files** (owned by other people):
-- `lib/features/report/` — Omer (P1)
-- `lib/features/map/` — Yarin (P2)
+**Do NOT touch these files:**
+- `lib/features/map/` — Person 2 owns this
+- `lib/features/report/` — Person 1 owns this
 
 ---
 
 ## What You Need to Build
 
-### Step 1 — User Profile Screen
-File: `lib/features/profile/presentation/profile_screen.dart`
+### Step 1 — Profile Screen
+A full dark-themed profile page that shows:
+- [ ] User avatar (initials circle if no photo)
+- [ ] Display name + email
+- [ ] Current level + XP progress bar (e.g. "Level 3 · 450/500 XP")
+- [ ] Total reports count
+- [ ] Badges grid (earned badges bright, unearned ones greyed out)
+- [ ] Settings button (top right)
 
-- [ ] Show avatar (use first letter of name if no photo)
-- [ ] Username + email
-- [ ] Current level (1–5) with label: Rookie / Hunter / Pro / Expert / Legend
-- [ ] XP bar showing progress to next level
-- [ ] Stats row: Total spots reported | Confirmed by others | Days active
-- [ ] Badges grid (earned = color, not earned = grey + locked icon)
+### Step 2 — Points & Levels System
+In `gamification_service.dart`, implement:
+- [ ] Points per action:
+  - Report a spot → +10 pts
+  - Spot confirmed by another user → +5 pts
+  - First report of the day → +15 pts (bonus)
+- [ ] Level thresholds:
+  ```
+  Level 1: 0–99 pts
+  Level 2: 100–299 pts
+  Level 3: 300–599 pts
+  Level 4: 600–999 pts
+  Level 5: 1000+ pts
+  ```
+- [ ] `int getLevel(int points)` — returns current level
+- [ ] `double getLevelProgress(int points)` — returns 0.0–1.0 for XP bar
 
-**Level thresholds:**
-```
-Level 1 — Rookie     0–49 pts
-Level 2 — Hunter     50–149 pts
-Level 3 — Pro        150–299 pts
-Level 4 — Expert     300–499 pts
-Level 5 — Legend     500+ pts
-```
+### Step 3 — Badges
+Define these badges in `badge_model.dart` and implement unlock logic in `gamification_service.dart`:
 
-### Step 2 — Badges
-File: `lib/models/badge_model.dart` (create if missing)
-
-Badges to implement:
 | Badge ID | Name | How to earn |
-|---|---|---|
-| `first_hunt` | First Hunt | Report your first spot |
-| `speed_demon` | Speed Demon | Report a spot within 1 min of parking |
-| `gold_hunter` | Gold Hunter | Reach 100 points |
+|----------|------|------------|
+| `first_hunter` | First Hunt | Submit first report |
+| `speed_demon` | Speed Demon | Report 5 spots in one day |
+| `gold_hunter` | Gold Hunter | Reach 1000 points |
 | `night_owl` | Night Owl | Report a spot after midnight |
-| `streak_3` | Streak x3 | Report 3 days in a row |
-| `top_10` | Top 10 | Appear in weekly leaderboard top 10 |
+| `streak_3` | On a Roll | Report 3 days in a row |
+| `top_10` | Top 10 | Reach top 10 on leaderboard |
 
-### Step 3 — Leaderboard
-File: `lib/features/leaderboard/presentation/leaderboard_screen.dart`
+- [ ] `List<String> checkNewBadges(AppUser user)` — returns list of newly unlocked badge IDs
+- [ ] Each badge has: id, name, emoji, description, isSecret (bool)
 
-- [ ] Fetch top 20 users sorted by `weeklyPoints` from Firestore
-- [ ] Show rank number, avatar, name, points
-- [ ] Highlight current user's row
-- [ ] "This week" / "All time" toggle
+### Step 4 — Leaderboard Screen
+- [ ] Show top 20 users ordered by points
+- [ ] Highlight the current user's row
+- [ ] Rank badge: 🥇🥈🥉 for top 3, number for the rest
+- [ ] Each row: rank + avatar + name + level + points
+- [ ] Reads from Firestore `users` collection ordered by `points`
 
-Firestore query:
-```dart
-Future<List<AppUser>> getLeaderboard({bool weekly = true}) {
-  final field = weekly ? 'weeklyPoints' : 'totalPoints';
-  return FirebaseFirestore.instance
-    .collection('users')
-    .orderBy(field, descending: true)
-    .limit(20)
-    .get()
-    .then((snap) => snap.docs.map((d) => AppUser.fromMap(d.data())).toList());
-}
-```
-
-### Step 4 — Points History
-On the profile screen, add a recent activity list:
-- [ ] "+10 pts — Reported a spot · 2h ago"
-- [ ] "+5 pts — Spot confirmed · Yesterday"
-- [ ] "+15 pts — First report of the day · Monday"
+### Step 5 — Level Up Animation
+When a user levels up after submitting a report:
+- [ ] Show a full-screen overlay with the new level number
+- [ ] Orange glow + celebration animation
+- [ ] Auto-dismisses after 3 seconds
+- [ ] File: `lib/features/home/presentation/widgets/level_up_overlay.dart` (already exists, improve it)
 
 ---
 
@@ -115,38 +112,32 @@ On the profile screen, add a recent activity list:
 ```
 users/
   {userId}/
-    displayName: "Omer Gal"
-    email: "omer@..."
-    photoUrl: "https://..."
-    totalPoints: 120
-    weeklyPoints: 45
-    totalReports: 12
-    level: 3
-    badgeIds: ["first_hunt", "gold_hunter"]
+    id: string
+    email: string
+    displayName: string
+    photoUrl: string (optional)
+    points: number        ← increment when they report
+    level: number         ← recalculate when points change
+    totalReports: number  ← increment on each report
+    badgeIds: string[]    ← add badge ID when unlocked
     createdAt: Timestamp
 ```
 
 ---
 
-## Points System (already wired up by Sharon)
+## Color Guide (match the app's dark theme)
 
-| Action | Points |
-|---|---|
-| Report a spot | +10 |
-| Your spot confirmed by another user | +5 |
-| First report of the day | +15 bonus |
+```dart
+// From AppTheme:
+bg = Color(0xFF080B14)        // background
+card = Color(0xFF111827)      // card background
+orange = Color(0xFFFF6B35)    // primary / XP bar
+neonGreen = Color(0xFF00E676) // success / level up
+neonYellow = Color(0xFFFFD600) // gold badges
+cardBorder = Color(0xFF1F2937) // borders
+```
 
-Points are updated automatically when Omer (P1) submits a report. Your job is to **display** them — not calculate them.
-
----
-
-## Design Guidelines
-
-- Background: `#080B14` (dark navy)
-- Accent: `#FF6B35` (orange) for XP bar, level badge
-- Earned badges: full color with glow
-- Locked badges: `Colors.white12` with lock icon overlay
-- Use `BackdropFilter` + `ImageFilter.blur` for glass cards (same style as rest of app)
+Use `BackdropFilter` + `ImageFilter.blur` for glass cards (same pattern as auth screen).
 
 ---
 
@@ -159,7 +150,7 @@ git pull origin feature/profile-gamification
 
 # When you finish something, commit it
 git add .
-git commit -m "Add profile screen with XP bar and level"
+git commit -m "Add badge grid to profile screen"
 git push origin feature/profile-gamification
 
 # When fully done — open a Pull Request on GitHub
@@ -170,4 +161,4 @@ git push origin feature/profile-gamification
 ---
 
 ## Questions?
-Ask in the group chat or tag @sharondonovich on the GitHub Pull Request.
+Tag @sharondonovich on the GitHub Pull Request or ask in the group chat.

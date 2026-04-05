@@ -8,73 +8,129 @@ class SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.primaryColor,
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Big P icon
-            Container(
-              width: 120,
-              height: 120,
+      backgroundColor: const Color(0xFF05080F),
+      body: Stack(
+        children: [
+          // Background glow
+          Positioned(
+            top: -100,
+            left: -100,
+            child: Container(
+              width: 400,
+              height: 400,
               decoration: BoxDecoration(
-                color: Colors.white,
                 shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: const Center(
-                child: Text(
-                  '🅿️',
-                  style: TextStyle(fontSize: 60),
+                gradient: RadialGradient(
+                  colors: [
+                    AppTheme.blue.withValues(alpha: 0.15),
+                    Colors.transparent,
+                  ],
                 ),
               ),
-            )
-                .animate()
-                .scaleXY(begin: 0.4, end: 1.0, duration: 600.ms, curve: Curves.elasticOut)
-                .fadeIn(duration: 400.ms),
-            const SizedBox(height: 28),
-            const Text(
-              'Parking Hunter',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 32,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1,
+            ),
+          ),
+          Positioned(
+            bottom: -80,
+            right: -80,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppTheme.blue.withValues(alpha: 0.08),
+                    Colors.transparent,
+                  ],
+                ),
               ),
-            )
-                .animate(delay: 300.ms)
-                .fadeIn(duration: 500.ms)
-                .slideY(begin: 0.3, end: 0),
-            const SizedBox(height: 8),
-            Text(
-              'Hunt. Report. Conquer.',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.8),
-                fontSize: 16,
-                letterSpacing: 0.5,
-              ),
-            )
-                .animate(delay: 500.ms)
-                .fadeIn(duration: 500.ms),
-            const SizedBox(height: 60),
-            SizedBox(
-              width: 32,
-              height: 32,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: Colors.white.withValues(alpha: 0.7),
-              ),
-            )
-                .animate(delay: 700.ms)
-                .fadeIn(duration: 400.ms),
-          ],
-        ),
+            ),
+          ),
+
+          // Content
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Logo
+                Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: AppTheme.blue,
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.blue.withValues(alpha: 0.5),
+                        blurRadius: 40,
+                        spreadRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Text('🅿️', style: TextStyle(fontSize: 48)),
+                  ),
+                )
+                    .animate()
+                    .fadeIn(duration: 400.ms)
+                    .scaleXY(
+                      begin: 0.5,
+                      end: 1.0,
+                      duration: 700.ms,
+                      curve: Curves.elasticOut,
+                    ),
+
+                const SizedBox(height: 32),
+
+                // App name
+                const Text(
+                  'Parking Hunter',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 34,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.5,
+                  ),
+                )
+                    .animate(delay: 300.ms)
+                    .fadeIn(duration: 500.ms)
+                    .slideY(begin: 0.4, end: 0, curve: Curves.easeOut),
+
+                const SizedBox(height: 10),
+
+                // Tagline
+                Text(
+                  'Find parking. Beat the city.',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.45),
+                    fontSize: 15,
+                    letterSpacing: 0.3,
+                    fontWeight: FontWeight.w400,
+                  ),
+                )
+                    .animate(delay: 500.ms)
+                    .fadeIn(duration: 500.ms),
+
+                const SizedBox(height: 80),
+
+                // Loading bar
+                SizedBox(
+                  width: 120,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      backgroundColor:
+                          Colors.white.withValues(alpha: 0.08),
+                      valueColor:
+                          const AlwaysStoppedAnimation<Color>(AppTheme.blue),
+                      minHeight: 3,
+                    ),
+                  ),
+                ).animate(delay: 700.ms).fadeIn(duration: 400.ms),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

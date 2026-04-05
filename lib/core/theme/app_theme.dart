@@ -37,6 +37,27 @@ class AppTheme {
   static const Color surfaceDark    = bg;
   static const Color cardDark       = card;
 
+  // ── P3 compat aliases ──────────────────────────────────────────────────────
+  static const Color blue           = Color(0xFF1DA1F2);
+  static const Color blueDark       = Color(0xFF0D8AD6);
+  static const Color blueLight      = Color(0xFFE8F5FE);
+  static const Color textDark       = Color(0xFF0F172A);
+  static const Color textMuted      = Color(0xFF64748B);
+  static const Color dividerLight   = Color(0xFFE2E8F0);
+
+  static List<BoxShadow> get cardShadow => [
+    BoxShadow(
+      color: const Color(0xFF1DA1F2).withValues(alpha: 0.07),
+      blurRadius: 20,
+      offset: const Offset(0, 4),
+    ),
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.04),
+      blurRadius: 8,
+      offset: const Offset(0, 2),
+    ),
+  ];
+
   // ── Glassmorphism helpers ──────────────────────────────────────────────────
   static BoxDecoration glassCard({double opacity = 0.06, double radius = 20}) =>
       BoxDecoration(

@@ -15,4 +15,6 @@ final demoUser = AppUser(
   currentStreak: 3,
   longestStreak: 7,
   createdAt: DateTime(2024, 1, 1),
+  todayReportsCount: 1,
+  lastReportDate: DateTime.now().subtract(const Duration(days: 1)),
 );

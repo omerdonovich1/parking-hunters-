@@ -13,6 +13,8 @@ class AppUser {
   final int currentStreak;
   final int longestStreak;
   final DateTime? lastReportDate;
+  final int todayReportsCount;
+  final DateTime? lastMissionCompletedDate;
 
   const AppUser({
     required this.id,
@@ -27,6 +29,8 @@ class AppUser {
     this.currentStreak = 0,
     this.longestStreak = 0,
     this.lastReportDate,
+    this.todayReportsCount = 0,
+    this.lastMissionCompletedDate,
   });
 
   Map<String, dynamic> toMap() {
@@ -44,6 +48,10 @@ class AppUser {
       'longestStreak': longestStreak,
       'lastReportDate':
           lastReportDate != null ? Timestamp.fromDate(lastReportDate!) : null,
+      'todayReportsCount': todayReportsCount,
+      'lastMissionCompletedDate': lastMissionCompletedDate != null
+          ? Timestamp.fromDate(lastMissionCompletedDate!)
+          : null,
     };
   }
 
@@ -74,6 +82,9 @@ class AppUser {
       currentStreak: (map['currentStreak'] as num?)?.toInt() ?? 0,
       longestStreak: (map['longestStreak'] as num?)?.toInt() ?? 0,
       lastReportDate: parseNullableDateTime(map['lastReportDate']),
+      todayReportsCount: (map['todayReportsCount'] as num?)?.toInt() ?? 0,
+      lastMissionCompletedDate:
+          parseNullableDateTime(map['lastMissionCompletedDate']),
     );
   }
 
@@ -91,6 +102,9 @@ class AppUser {
     int? longestStreak,
     DateTime? lastReportDate,
     bool clearLastReportDate = false,
+    int? todayReportsCount,
+    DateTime? lastMissionCompletedDate,
+    bool clearLastMissionCompletedDate = false,
   }) {
     return AppUser(
       id: id ?? this.id,
@@ -107,6 +121,10 @@ class AppUser {
       lastReportDate: clearLastReportDate
           ? null
           : (lastReportDate ?? this.lastReportDate),
+      todayReportsCount: todayReportsCount ?? this.todayReportsCount,
+      lastMissionCompletedDate: clearLastMissionCompletedDate
+          ? null
+          : (lastMissionCompletedDate ?? this.lastMissionCompletedDate),
     );
   }
 }
