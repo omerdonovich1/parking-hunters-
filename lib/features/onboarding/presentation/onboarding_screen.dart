@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../services/onboarding_service.dart';
 import '../../../core/utils/app_router.dart';
+import '../../../providers/locale_provider.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -15,30 +16,6 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final PageController _controller = PageController();
   int _currentPage = 0;
-
-  final List<_OnboardingPage> _pages = const [
-    _OnboardingPage(
-      emoji: '🗺️',
-      title: 'Find Parking Instantly',
-      subtitle:
-          'See real-time parking spots reported by other drivers near you. Green means available right now.',
-      color: Color(0xFF4CAF50),
-    ),
-    _OnboardingPage(
-      emoji: '🎯',
-      title: 'Become a Hunter',
-      subtitle:
-          'Spot a free space? Report it in seconds. Earn points, level up, and unlock badges as you hunt.',
-      color: Color(0xFFFF6B35),
-    ),
-    _OnboardingPage(
-      emoji: '🏆',
-      title: 'Climb the League',
-      subtitle:
-          'Compete with hunters in your city. The best hunters top the weekly leaderboard and earn exclusive badges.',
-      color: Color(0xFF9C27B0),
-    ),
-  ];
 
   @override
   void dispose() {
@@ -54,26 +31,32 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = ref.watch(appStringsProvider);
+    final pages = [
+      _OnboardingPage(emoji: '🗺️', title: s.ob1Title, subtitle: s.ob1Sub, color: const Color(0xFF4CAF50)),
+      _OnboardingPage(emoji: '🎯', title: s.ob2Title, subtitle: s.ob2Sub, color: const Color(0xFFFF6B35)),
+      _OnboardingPage(emoji: '🏆', title: s.ob3Title, subtitle: s.ob3Sub, color: const Color(0xFF9C27B0)),
+    ];
     return Scaffold(
       body: Stack(
         children: [
           PageView.builder(
             controller: _controller,
-            itemCount: _pages.length,
+            itemCount: pages.length,
             onPageChanged: (i) => setState(() => _currentPage = i),
-            itemBuilder: (_, i) => _PageContent(page: _pages[i]),
+            itemBuilder: (_, i) => _PageContent(page: pages[i]),
           ),
           // Skip button
           Positioned(
             top: MediaQuery.of(context).padding.top + 16,
             right: 20,
-            child: _currentPage < _pages.length - 1
+            child: _currentPage < pages.length - 1
                 ? TextButton(
                     onPressed: _finish,
                     child: Text(
-                      'Skip',
+                      s.skip,
                       style: TextStyle(
-                        color: _pages[_currentPage].color,
+                        color: pages[_currentPage].color,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -90,7 +73,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 // Dot indicators
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(_pages.length, (i) {
+                  children: List.generate(pages.length, (i) {
                     final selected = i == _currentPage;
                     return AnimatedContainer(
                       duration: 250.ms,
@@ -99,7 +82,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       height: 8,
                       decoration: BoxDecoration(
                         color: selected
-                            ? _pages[_currentPage].color
+                            ? pages[_currentPage].color
                             : Colors.grey.shade300,
                         borderRadius: BorderRadius.circular(4),
                       ),
@@ -114,7 +97,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () {
-                        if (_currentPage < _pages.length - 1) {
+                        if (_currentPage < pages.length - 1) {
                           _controller.nextPage(
                             duration: 400.ms,
                             curve: Curves.easeInOut,
@@ -124,7 +107,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         }
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _pages[_currentPage].color,
+                        backgroundColor: pages[_currentPage].color,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
@@ -133,9 +116,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         elevation: 4,
                       ),
                       child: Text(
-                        _currentPage < _pages.length - 1
-                            ? 'Next'
-                            : 'Start Hunting! 🎯',
+                        _currentPage < pages.length - 1
+                            ? s.next
+                            : s.startHunting,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,

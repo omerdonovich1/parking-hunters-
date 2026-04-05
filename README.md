@@ -1,89 +1,103 @@
 # Parking Hunter 🅿️
 
-A gamified, crowd-sourced parking finder app built with Flutter and Firebase.
-
-## Features
-
-- Real-time parking spot map with confidence scores
-- Crowd-sourced reporting with points + badge rewards
-- Searcher/Hunter mode toggle
-- Leaderboard and weekly league
-- Google and Apple Sign-In
+A gamified, crowd-sourced parking finder app — like Pokémon Go but for parking spots.
+Built with Flutter + Firebase. iOS & Android.
 
 ---
 
-## Setup Instructions
+## What is it?
 
-### 1. Firebase Setup
+Users report free parking spots in real time. The app uses **AI (Claude Vision)** to scan a photo of the spot and confirm it's actually free. Spots expire after 30 minutes unless someone refreshes them. Everyone earns points and badges for reporting.
 
-1. Go to [console.firebase.google.com](https://console.firebase.google.com) and create a new project called **parking-hunter**.
-2. Add an **Android** app:
-   - Package name: `com.example.parking_hunter`
-   - Download `google-services.json`
-   - Place it at `android/app/google-services.json`
-3. Add an **iOS** app:
-   - Bundle ID: `com.example.parkingHunter`
-   - Download `GoogleService-Info.plist`
-   - Place it at `ios/Runner/GoogleService-Info.plist`
-4. Enable **Authentication** providers: Email/Password, Google, Apple
-5. Enable **Cloud Firestore** in test mode (lock down rules before production)
-6. Enable **Firebase Storage**
+---
 
-### 2. Google Maps API Key
+## Core Features
 
-1. Go to [console.cloud.google.com](https://console.cloud.google.com)
-2. Enable **Maps SDK for Android** and **Maps SDK for iOS**
-3. Create an API key and restrict it to your app
+| Feature | Status |
+|---------|--------|
+| Full-screen dark map (OpenStreetMap) | ✅ Done |
+| Premium dark UI / glassmorphism design | ✅ Done |
+| Google + Apple + Email sign-in | ✅ Done |
+| 4-step spot reporting flow | ✅ Done |
+| AI photo scan (Claude Vision) | ✅ Done |
+| Upload photo to Firebase Storage | ✅ Done |
+| Save spot to Firestore | ✅ Done |
+| Real-time spots on map | 🔧 In progress (P2) |
+| Spot expiry after 30 min | 🔧 In progress (P2) |
+| Profile screen + XP bar | 🔧 In progress (P3) |
+| Badges + leaderboard | 🔧 In progress (P3) |
 
-**Android** — add to `android/app/src/main/AndroidManifest.xml` inside `<application>`:
-```xml
-<meta-data
-    android:name="com.google.android.geo.API_KEY"
-    android:value="YOUR_API_KEY_HERE"/>
-```
+---
 
-**iOS** — add to `ios/Runner/AppDelegate.swift`:
-```swift
-import GoogleMaps
-// In application(_:didFinishLaunchingWithOptions:):
-GMSServices.provideAPIKey("YOUR_API_KEY_HERE")
-```
+## Tech Stack
 
-Also update `lib/core/config/app_config.dart`:
-```dart
-static const String googleMapsApiKey = 'YOUR_API_KEY_HERE';
-```
+- **Flutter** — iOS & Android
+- **Firebase** — Auth, Firestore, Storage
+- **OpenStreetMap** via `flutter_map` — free, no API key needed
+- **Claude Vision API** — AI photo scan to verify free spots
+- **Riverpod** — state management
+- **go_router** — navigation
 
-### 3. Install Dependencies
+---
+
+## Team & Branches
+
+| Person | Branch | Responsibility |
+|--------|--------|---------------|
+| Sharon | `main` | Project lead — integration, Firebase config, deployment |
+| Omer (P1) | `feature/spot-reporting` | Reporter journey — report flow, AI scan, spot lifecycle |
+| Yarin (P2) | `feature/live-map` | Explorer journey — real-time map, spot markers, filters |
+| Omer Gal (P3) | `feature/profile-gamification` | Competitor journey — profile, XP, badges, leaderboard |
+
+Each person has a detailed guide in the `docs/` folder.
+
+---
+
+## How to Run
 
 ```bash
+git clone https://github.com/omerdonovich1/parking-hunters-.git
+cd parking-hunters-
+git checkout feature/your-branch
 flutter pub get
-```
-
-### 4. Run the App
-
-```bash
 flutter run
 ```
 
-For release builds:
-```bash
-flutter build apk --release
-flutter build ios --release
+Tap **"Try Demo Mode"** on the login screen — no Firebase setup needed to start developing.
+
+---
+
+## Spot Reporting Flow
+
+1. **Pin location** — GPS detects where the spot is
+2. **Take photo** — mandatory camera shot of the spot
+3. **AI scan** — Claude Vision analyzes the photo and returns:
+   - `is_free: true/false`
+   - `confidence: 0–100%`
+   - `reason: "No car visible in the space"`
+4. **Submit** — spot saved to Firestore, expires in 30 min, user earns +10 pts
+
+---
+
+## Spot Lifecycle
+
+```
+Reported → Active (30 min) → Expired
+                ↓
+        Someone marks it taken → Immediately removed
+                ↓
+        New photo submitted → Timer resets to 30 min
 ```
 
 ---
 
-## Team Workflow (Multiple Developers)
+## Gamification
 
-1. **Never commit** `google-services.json`, `GoogleService-Info.plist`, or `key.properties` — these are gitignored.
-2. Each developer sets up their own Firebase config files locally.
-3. Use a shared **Notion / Confluence doc** to store non-secret setup steps.
-4. For CI/CD: inject Firebase config files via environment secrets in your pipeline (GitHub Actions, Codemagic, etc.).
-5. To generate code (freezed, riverpod):
-   ```bash
-   dart run build_runner build --delete-conflicting-outputs
-   ```
+- **+10 pts** — report a spot
+- **+5 pts** — your spot gets confirmed by another user
+- **+15 pts** — first report of the day (bonus)
+- Levels 1–5 based on total points
+- Badges: First Hunt, Speed Demon, Gold Hunter, Night Owl, Streak x3, Top 10
 
 ---
 
@@ -92,43 +106,41 @@ flutter build ios --release
 ```
 lib/
   core/
-    config/       # App constants and config
-    theme/        # Material 3 light/dark theme
+    config/       # Firebase options, app constants
+    theme/        # Dark theme, glassmorphism helpers
     utils/        # Router, constants
-    widgets/      # Reusable widgets
+    widgets/      # Shared widgets (ad banner, loading, etc.)
   features/
-    auth/         # Auth screen
-    home/         # Shell + bottom nav
-    map/          # Google Map + spot bottom sheet
-    report/       # 3-step report flow
-    profile/      # User profile, badges, league
-    gamification/ # League model
-  models/         # Parking spot, user, report, badge
-  providers/      # Riverpod state providers
-  services/       # Auth, Firestore, Location, Gamification
+    auth/         # Login screen (Google, Apple, email)
+    home/         # Shell + floating bottom nav
+    map/          # Full-screen map + spot markers
+    report/       # 4-step report flow
+    profile/      # User profile + badges
+    leaderboard/  # Top hunters
+    onboarding/   # First-launch screens
+    settings/     # Theme toggle etc.
+  models/         # ParkingSpot, AppUser, Report, Badge
+  providers/      # Riverpod providers
+  services/       # Auth, Firestore, Storage, AI scan, Location
+docs/
+  PERSON_1_SPOT_REPORTING.md
+  PERSON_2_LIVE_MAP.md
+  PERSON_3_PROFILE_GAMIFICATION.md
 ```
 
 ---
 
-## Firestore Security Rules (Production)
+## Firestore Collections
 
-```js
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{userId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth.uid == userId;
-    }
-    match /parking_spots/{spotId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null;
-    }
-    match /reports/{reportId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-    }
-  }
-}
 ```
+parking_spots/   — active spot reports
+users/           — user profiles + points + badges
+reports/         — raw report logs
+```
+
+---
+
+## Important Notes
+
+- `GoogleService-Info.plist` and `google-services.json` are **gitignored** — never commit them. Ask the team lead for these files when you're ready to test with real Firebase.
+- Claude API key lives in `lib/core/config/app_config.dart` — replace `YOUR_CLAUDE_API_KEY` before running on device. Never commit this key.

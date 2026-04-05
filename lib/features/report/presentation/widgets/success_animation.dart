@@ -1,17 +1,19 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../providers/locale_provider.dart';
 
-class SuccessAnimation extends StatefulWidget {
+class SuccessAnimation extends ConsumerStatefulWidget {
   final VoidCallback? onDismiss;
 
   const SuccessAnimation({super.key, this.onDismiss});
 
   @override
-  State<SuccessAnimation> createState() => _SuccessAnimationState();
+  ConsumerState<SuccessAnimation> createState() => _SuccessAnimationState();
 }
 
-class _SuccessAnimationState extends State<SuccessAnimation>
+class _SuccessAnimationState extends ConsumerState<SuccessAnimation>
     with TickerProviderStateMixin {
   late AnimationController _particleController;
   int _displayedPoints = 0;
@@ -46,6 +48,7 @@ class _SuccessAnimationState extends State<SuccessAnimation>
 
   @override
   Widget build(BuildContext context) {
+    final s = ref.watch(appStringsProvider);
     return Material(
       color: Colors.black.withValues(alpha: 0.85),
       child: Stack(
@@ -85,9 +88,9 @@ class _SuccessAnimationState extends State<SuccessAnimation>
                     )
                     .fadeIn(duration: 200.ms),
                 const SizedBox(height: 24),
-                const Text(
-                  'Successful Hunt! 🎯',
-                  style: TextStyle(
+                Text(
+                  s.successfulHunt,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
@@ -96,6 +99,16 @@ class _SuccessAnimationState extends State<SuccessAnimation>
                     .animate()
                     .fadeIn(delay: 300.ms, duration: 400.ms)
                     .slideY(begin: 0.3, end: 0, delay: 300.ms, duration: 400.ms),
+                const SizedBox(height: 8),
+                Text(
+                  s.thanksForHelp,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 14,
+                  ),
+                )
+                    .animate()
+                    .fadeIn(delay: 400.ms, duration: 300.ms),
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -104,7 +117,7 @@ class _SuccessAnimationState extends State<SuccessAnimation>
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: Text(
-                    '+$_displayedPoints points',
+                    s.pointsLabel(_displayedPoints),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 22,

@@ -1,10 +1,17 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shimmer/shimmer.dart';
 import '../../../providers/report_provider.dart';
 import '../../../services/location_service.dart';
+import '../../../services/ai_scan_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_toast.dart';
+import '../../../core/l10n/app_strings.dart';
+import '../../../providers/locale_provider.dart';
 import 'widgets/success_animation.dart';
 
 class ReportScreen extends ConsumerStatefulWidget {
@@ -14,20 +21,43 @@ class ReportScreen extends ConsumerStatefulWidget {
   ConsumerState<ReportScreen> createState() => _ReportScreenState();
 }
 
-class _ReportScreenState extends ConsumerState<ReportScreen> {
+class _ReportScreenState extends ConsumerState<ReportScreen>
+    with TickerProviderStateMixin {
   int _currentStep = 0;
   double? _lat;
   double? _lng;
-  String _address = 'Tap to get current location';
+  String _address = '';
   bool _isGettingLocation = false;
-  final _noteController = TextEditingController();
-  double _estimatedMinutes = 30;
   bool _showSuccess = false;
   final LocationService _locationService = LocationService();
 
+  late AnimationController _scanAnimController;
+  late Animation<double> _scanAnim;
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _scanAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
+    _scanAnim = Tween<double>(begin: 0, end: 1).animate(_scanAnimController);
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 0.85, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+  }
+
   @override
   void dispose() {
-    _noteController.dispose();
+    _scanAnimController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -43,47 +73,44 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
         _lat = position.latitude;
         _lng = position.longitude;
         _address = address;
-        _isGettingLocation = false;
       });
-    } catch (e) {
+    } catch (_) {
       setState(() {
         _lat = 32.0853;
         _lng = 34.7818;
         _address = 'Tel Aviv (demo location)';
-        _isGettingLocation = false;
       });
+    } finally {
+      setState(() => _isGettingLocation = false);
     }
   }
 
   Future<void> _submitReport() async {
-    if (_lat == null || _lng == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please get your location first')),
-      );
-      return;
-    }
+    if (_lat == null || _lng == null) return;
+    HapticFeedback.heavyImpact();
     await ref.read(reportProvider.notifier).submitReport(
       lat: _lat!,
       lng: _lng!,
-      note: _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
-      estimatedMinutes: _estimatedMinutes.toInt(),
+      estimatedMinutes: 30,
     );
-    final reportState = ref.read(reportProvider);
-    if (reportState.isSuccess) {
+    final s = ref.read(reportProvider);
+    if (s.isSuccess && mounted) {
+      // 3-beat rising pattern: light → medium → heavy
+      HapticFeedback.lightImpact();
+      await Future.delayed(const Duration(milliseconds: 80));
+      HapticFeedback.mediumImpact();
+      await Future.delayed(const Duration(milliseconds: 80));
+      HapticFeedback.heavyImpact();
       setState(() => _showSuccess = true);
-      if (reportState.newBadgeId != null) {
+      if (s.newBadgeId != null) {
+        final str = ref.read(appStringsProvider);
         Future.delayed(const Duration(seconds: 3), () {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'New badge unlocked: ${reportState.newBadgeId!.replaceAll('_', ' ')}!',
-                ),
-                backgroundColor: Colors.amber.shade700,
-                duration: const Duration(seconds: 4),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
+            showToast(context,
+              type: ToastType.warning,
+              title: str.badgeUnlocked,
+              subtitle: s.newBadgeId!.replaceAll('_', ' '),
+              duration: const Duration(seconds: 4),
             );
           }
         });
@@ -94,850 +121,909 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
   void _onSuccessDismissed() {
     setState(() => _showSuccess = false);
     ref.read(reportProvider.notifier).reset();
-    _noteController.clear();
     setState(() {
       _currentStep = 0;
       _lat = null;
       _lng = null;
-      _address = 'Tap to get current location';
-      _estimatedMinutes = 30;
+      _address = '';
     });
-    context.go('/map');
+    context.go('/');
+  }
+
+  void _nextStep() {
+    if (_currentStep < 3) {
+      HapticFeedback.lightImpact();
+      setState(() => _currentStep++);
+      // Auto-trigger AI scan when entering step 3
+      if (_currentStep == 2) {
+        Future.microtask(() => ref.read(reportProvider.notifier).scanWithAI());
+      }
+    }
+  }
+
+  void _prevStep() {
+    if (_currentStep > 0) setState(() => _currentStep--);
   }
 
   @override
   Widget build(BuildContext context) {
     final reportState = ref.watch(reportProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF0F1219) : const Color(0xFFF8FAFC);
-    final textPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
-
+    final s = ref.watch(appStringsProvider);
     return Stack(
       children: [
         Scaffold(
-          backgroundColor: bg,
+          backgroundColor: AppTheme.bg,
           body: SafeArea(
             child: Column(
               children: [
-                // Header
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () => context.go('/map'),
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.08)
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: isDark
-                                ? []
-                                : [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.06),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                          ),
-                          child: Icon(Icons.arrow_back_rounded,
-                              size: 20, color: textPrimary),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Text(
-                        'Report a Spot',
-                        style: TextStyle(
-                          color: textPrimary,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // Step indicator
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: _buildStepIndicator(isDark, textPrimary),
-                ),
-
-                const SizedBox(height: 24),
-
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _buildCurrentStep(isDark, textPrimary),
-                  ),
-                ),
-
-                // Bottom buttons
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-                  child: _buildNavigationButtons(reportState, isDark, textPrimary),
-                ),
+                _buildHeader(s),
+                _buildStepIndicator(),
+                const SizedBox(height: 8),
+                Expanded(child: _buildCurrentStep(reportState, s)),
+                _buildBottomBar(reportState, s),
               ],
             ),
           ),
         ),
         if (_showSuccess)
-          Positioned.fill(
-            child: SuccessAnimation(onDismiss: _onSuccessDismissed),
-          ),
+          Positioned.fill(child: SuccessAnimation(onDismiss: _onSuccessDismissed)),
       ],
     );
   }
 
-  Widget _buildStepIndicator(bool isDark, Color textPrimary) {
-    const steps = ['Location', 'Details', 'Submit'];
-    final lineColor = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : const Color(0xFFE2E8F0);
-
-    return Row(
-      children: List.generate(steps.length, (i) {
-        final isActive = i == _currentStep;
-        final isCompleted = i < _currentStep;
-        return Expanded(
-          child: Row(
-            children: [
-              if (i > 0)
-                Expanded(
-                  child: Container(
-                    height: 2,
-                    color: isCompleted ? AppTheme.blue : lineColor,
-                  ),
-                ),
-              Column(
-                children: [
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: isActive || isCompleted
-                          ? AppTheme.blue
-                          : (isDark
-                              ? Colors.white.withValues(alpha: 0.08)
-                              : const Color(0xFFE2E8F0)),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: isCompleted
-                          ? const Icon(Icons.check_rounded,
-                              color: Colors.white, size: 16)
-                          : Text(
-                              '${i + 1}',
-                              style: TextStyle(
-                                color: isActive
-                                    ? Colors.white
-                                    : (isDark
-                                        ? Colors.white.withValues(alpha: 0.4)
-                                        : const Color(0xFF94A3B8)),
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    steps[i],
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isActive
-                          ? AppTheme.blue
-                          : (isDark
-                              ? Colors.white.withValues(alpha: 0.35)
-                              : const Color(0xFF94A3B8)),
-                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      }),
-    );
-  }
-
-  Widget _buildCurrentStep(bool isDark, Color textPrimary) {
-    switch (_currentStep) {
-      case 0:
-        return _buildLocationStep(isDark, textPrimary);
-      case 1:
-        return _buildDetailsStep(isDark, textPrimary);
-      case 2:
-        return _buildSummaryStep(isDark, textPrimary);
-      default:
-        return _buildLocationStep(isDark, textPrimary);
-    }
-  }
-
-  Widget _buildLocationStep(bool isDark, Color textPrimary) {
-    final surface = isDark ? const Color(0xFF1A1F2E) : Colors.white;
-    final textMuted = isDark ? const Color(0xFF8B9CB8) : const Color(0xFF64748B);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Where is the spot?',
-          style: TextStyle(
-            color: textPrimary,
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.4,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Use GPS to pinpoint your current location.',
-          style: TextStyle(color: textMuted, fontSize: 14),
-        ),
-        const SizedBox(height: 24),
-
-        // Map preview card
-        Container(
-          height: 160,
-          decoration: BoxDecoration(
-            color: surface,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: isDark
-                ? []
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.06),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-          ),
-          child: Center(
-            child: _lat != null
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: AppTheme.blue.withValues(alpha: 0.12),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.location_on_rounded,
-                            color: AppTheme.blue, size: 26),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        '${_lat!.toStringAsFixed(5)}, ${_lng!.toStringAsFixed(5)}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: textPrimary,
-                          fontSize: 13,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Location captured',
-                        style: TextStyle(
-                            color: const Color(0xFF22C55E),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  )
-                : Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.map_rounded,
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.15)
-                              : const Color(0xFFCBD5E1),
-                          size: 44),
-                      const SizedBox(height: 10),
-                      Text('No location yet',
-                          style: TextStyle(color: textMuted, fontSize: 13)),
-                    ],
-                  ),
-          ),
-        ),
-
-        const SizedBox(height: 14),
-
-        // Address pill
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: surface,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: isDark
-                ? []
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.location_on_rounded,
-                  color: _lat != null ? AppTheme.blue : textMuted, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  _address,
-                  style: TextStyle(
-                    color: _lat != null ? textPrimary : textMuted,
-                    fontSize: 14,
-                    fontWeight:
-                        _lat != null ? FontWeight.w500 : FontWeight.normal,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 14),
-
-        SizedBox(
-          height: 52,
-          child: ElevatedButton(
-            onPressed: _isGettingLocation ? null : _getCurrentLocation,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.blue,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
-            ),
-            child: _isGettingLocation
-                ? const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
-                      ),
-                      SizedBox(width: 10),
-                      Text('Getting location...',
-                          style: TextStyle(fontWeight: FontWeight.w600)),
-                    ],
-                  )
-                : const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.my_location_rounded, size: 18),
-                      SizedBox(width: 8),
-                      Text('Use Current Location',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 15)),
-                    ],
-                  ),
-          ),
-        ),
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-
-  Widget _buildDetailsStep(bool isDark, Color textPrimary) {
-    final surface = isDark ? const Color(0xFF1A1F2E) : Colors.white;
-    final textMuted = isDark ? const Color(0xFF8B9CB8) : const Color(0xFF64748B);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Add details',
-          style: TextStyle(
-            color: textPrimary,
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.4,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Optional photo and notes help others find it.',
-          style: TextStyle(color: textMuted, fontSize: 14),
-        ),
-        const SizedBox(height: 24),
-
-        Consumer(
-          builder: (context, ref, _) {
-            final reportState = ref.watch(reportProvider);
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _OutlineButton(
-                        icon: Icons.camera_alt_rounded,
-                        label: 'Camera',
-                        isDark: isDark,
-                        onTap: () => ref
-                            .read(reportProvider.notifier)
-                            .pickImage(fromCamera: true),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _OutlineButton(
-                        icon: Icons.photo_library_rounded,
-                        label: 'Gallery',
-                        isDark: isDark,
-                        onTap: () => ref
-                            .read(reportProvider.notifier)
-                            .pickImage(fromCamera: false),
-                      ),
-                    ),
-                  ],
-                ),
-                if (reportState.selectedImagePath != null) ...[
-                  const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Stack(
-                      children: [
-                        Image.file(
-                          File(reportState.selectedImagePath!),
-                          width: double.infinity,
-                          height: 180,
-                          fit: BoxFit.cover,
-                        ),
-                        Positioned(
-                          top: 10,
-                          right: 10,
-                          child: GestureDetector(
-                            onTap: () => ref
-                                .read(reportProvider.notifier)
-                                .clearImage(),
-                            child: Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.6),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.close_rounded,
-                                  color: Colors.white, size: 16),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          bottom: 10,
-                          left: 10,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF22C55E),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.check_rounded,
-                                    color: Colors.white, size: 12),
-                                SizedBox(width: 4),
-                                Text('Photo added',
-                                    style: TextStyle(
-                                        color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            );
-          },
-        ),
-
-        const SizedBox(height: 20),
-
-        // Note field
-        Container(
-          decoration: BoxDecoration(
-            color: surface,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: isDark
-                ? []
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-          ),
-          child: TextField(
-            controller: _noteController,
-            maxLines: 3,
-            style: TextStyle(color: textPrimary, fontSize: 14),
-            decoration: InputDecoration(
-              hintText: 'Add a note (optional) — e.g. Blue zone, near pharmacy',
-              hintStyle: TextStyle(color: textMuted, fontSize: 14),
-              prefixIcon:
-                  Icon(Icons.notes_rounded, color: textMuted, size: 20),
-              border: InputBorder.none,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 24),
-
-        Text(
-          'Available for how long?',
-          style: TextStyle(
-            color: textPrimary,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 12),
-
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: surface,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: isDark
-                ? []
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    trackHeight: 4,
-                    thumbShape:
-                        const RoundSliderThumbShape(enabledThumbRadius: 8),
-                    overlayShape:
-                        const RoundSliderOverlayShape(overlayRadius: 16),
-                    activeTrackColor: AppTheme.blue,
-                    inactiveTrackColor: isDark
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : const Color(0xFFE2E8F0),
-                    thumbColor: AppTheme.blue,
-                    overlayColor: AppTheme.blue.withValues(alpha: 0.15),
-                  ),
-                  child: Slider(
-                    value: _estimatedMinutes,
-                    min: 15,
-                    max: 120,
-                    divisions: 7,
-                    label: '${_estimatedMinutes.toInt()} min',
-                    onChanged: (v) => setState(() => _estimatedMinutes = v),
-                  ),
-                ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppTheme.blue.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '${_estimatedMinutes.toInt()}m',
-                  style: const TextStyle(
-                    color: AppTheme.blue,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-
-  Widget _buildSummaryStep(bool isDark, Color textPrimary) {
-    final surface = isDark ? const Color(0xFF1A1F2E) : Colors.white;
-    final textMuted = isDark ? const Color(0xFF8B9CB8) : const Color(0xFF64748B);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Ready to submit',
-          style: TextStyle(
-            color: textPrimary,
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.4,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Review your report before sending.',
-          style: TextStyle(color: textMuted, fontSize: 14),
-        ),
-        const SizedBox(height: 24),
-
-        _summaryCard('Location', _address, Icons.location_on_rounded, isDark, textPrimary, textMuted, surface),
-        const SizedBox(height: 10),
-        _summaryCard('Available for', '${_estimatedMinutes.toInt()} minutes', Icons.timer_rounded, isDark, textPrimary, textMuted, surface),
-        if (_noteController.text.trim().isNotEmpty) ...[
-          const SizedBox(height: 10),
-          _summaryCard('Note', _noteController.text.trim(), Icons.notes_rounded, isDark, textPrimary, textMuted, surface),
-        ],
-
-        const SizedBox(height: 20),
-
-        // Points reward card
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                AppTheme.blue.withValues(alpha: 0.12),
-                AppTheme.blue.withValues(alpha: 0.06),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppTheme.blue.withValues(alpha: 0.2)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppTheme.blue.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Center(
-                  child: Text('🎯', style: TextStyle(fontSize: 22)),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'You earn +10 points!',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                      color: AppTheme.blue,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Thank you for helping the community',
-                    style: TextStyle(color: textMuted, fontSize: 13),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-
-  Widget _summaryCard(String title, String value, IconData icon,
-      bool isDark, Color textPrimary, Color textMuted, Color surface) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-      ),
+  Widget _buildHeader(AppStrings s) {
+    final titles = [s.stepPinLocation, s.stepTakePhoto, s.stepAiScan, s.stepConfirm];
+    final subs = [s.stepSubWhere, s.stepSubPhoto, s.stepSubAi, s.stepSubConfirm];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: AppTheme.blue, size: 18),
-          const SizedBox(width: 12),
+          GestureDetector(
+            onTap: () => _currentStep == 0 ? context.go('/') : _prevStep(),
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              ),
+              child: const Icon(Icons.arrow_back_ios_new, color: Colors.white54, size: 16),
+            ),
+          ),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style: TextStyle(
-                        color: textMuted,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.4)),
-                const SizedBox(height: 3),
-                Text(value,
-                    style: TextStyle(
-                        color: textPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500)),
+                Text(
+                  titles[_currentStep],
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  subs[_currentStep],
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.4),
+                    fontSize: 12,
+                  ),
+                ),
               ],
             ),
+          ),
+          Text(
+            '${_currentStep + 1}/4',
+            style: const TextStyle(color: AppTheme.orange, fontWeight: FontWeight.w700, fontSize: 14),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildNavigationButtons(
-      ReportState reportState, bool isDark, Color textPrimary) {
-    return Row(
-      children: [
-        if (_currentStep > 0) ...[
-          GestureDetector(
-            onTap: () => setState(() => _currentStep--),
-            child: Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: isDark
-                    ? []
-                    : [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.06),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
+  Widget _buildStepIndicator() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      child: Row(
+        children: List.generate(4, (i) {
+          final isActive = i == _currentStep;
+          final isDone = i < _currentStep;
+          return Expanded(
+            child: Row(
+              children: [
+                if (i > 0)
+                  Expanded(
+                    child: Container(
+                      height: 2,
+                      decoration: BoxDecoration(
+                        gradient: isDone
+                            ? const LinearGradient(colors: [AppTheme.orange, AppTheme.orange])
+                            : null,
+                        color: isDone ? null : Colors.white.withValues(alpha: 0.1),
+                      ),
+                    ),
+                  ),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  width: isActive ? 28 : 20,
+                  height: isActive ? 28 : 20,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isActive
+                        ? AppTheme.orange
+                        : isDone
+                            ? AppTheme.neonGreen
+                            : Colors.white.withValues(alpha: 0.1),
+                    boxShadow: isActive
+                        ? [BoxShadow(color: AppTheme.orange.withValues(alpha: 0.5), blurRadius: 10)]
+                        : [],
+                  ),
+                  child: Center(
+                    child: isDone
+                        ? const Icon(Icons.check, color: Colors.white, size: 12)
+                        : Text(
+                            '${i + 1}',
+                            style: TextStyle(
+                              color: isActive ? Colors.white : Colors.white38,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildCurrentStep(ReportState reportState, AppStrings s) {
+    switch (_currentStep) {
+      case 0:  return _buildLocationStep(s);
+      case 1:  return _buildPhotoStep(reportState, s);
+      case 2:  return _buildScanStep(reportState, s);
+      case 3:  return _buildConfirmStep(reportState, s);
+      default: return _buildLocationStep(s);
+    }
+  }
+
+  // ── STEP 1: LOCATION ──────────────────────────────────────────────────────
+
+  Widget _buildLocationStep(AppStrings s) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 8),
+          // Map preview / GPS card
+          _GlassCard(
+            child: Column(
+              children: [
+                Container(
+                  height: 160,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    gradient: LinearGradient(
+                      colors: [
+                        AppTheme.card,
+                        AppTheme.bg.withValues(alpha: 0.5),
                       ],
-              ),
-              child: Icon(Icons.arrow_back_rounded,
-                  color: textPrimary, size: 20),
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: _lat != null
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.location_on, color: AppTheme.orange, size: 40),
+                              const SizedBox(height: 8),
+                              Text(
+                                '${_lat!.toStringAsFixed(5)}, ${_lng!.toStringAsFixed(5)}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.map_outlined, color: Colors.white12, size: 48),
+                              const SizedBox(height: 8),
+                              Text(
+                                s.noLocationYet,
+                                style: const TextStyle(color: Colors.white24, fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.location_on,
+                      color: _lat != null ? AppTheme.orange : Colors.white24,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _address.isEmpty ? s.tapToDetectLoc : _address,
+                        style: TextStyle(
+                          color: _lat != null ? Colors.white70 : Colors.white30,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(height: 16),
+          _OrangeButton(
+            onTap: _isGettingLocation ? null : _getCurrentLocation,
+            child: _isGettingLocation
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.my_location, color: Colors.white, size: 18),
+                      const SizedBox(width: 10),
+                      Text(
+                        s.detectMyLocation,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
+                      ),
+                    ],
+                  ),
+          ),
         ],
-        Expanded(
-          child: SizedBox(
-            height: 52,
-            child: ElevatedButton(
-              onPressed: reportState.isLoading
-                  ? null
-                  : () {
-                      if (_currentStep == 0) {
-                        if (_lat == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text(
-                                  'Please get your location first'),
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  // ── STEP 2: PHOTO ─────────────────────────────────────────────────────────
+
+  Widget _buildPhotoStep(ReportState reportState, AppStrings s) {
+    final hasPhoto = reportState.selectedImagePath != null;
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 8),
+          Expanded(
+            child: _GlassCard(
+              padding: EdgeInsets.zero,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: hasPhoto
+                    ? Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Image.file(
+                            File(reportState.selectedImagePath!),
+                            fit: BoxFit.cover,
+                          ),
+                          // Retake button
+                          Positioned(
+                            top: 12,
+                            right: 12,
+                            child: GestureDetector(
+                              onTap: () => ref.read(reportProvider.notifier).clearImage(),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(20),
+                                child: BackdropFilter(
+                                  filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    color: Colors.black54,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.refresh, color: Colors.white, size: 14),
+                                        const SizedBox(width: 4),
+                                        Text(s.retake, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
-                          );
-                          return;
-                        }
-                        setState(() => _currentStep = 1);
-                      } else if (_currentStep == 1) {
-                        setState(() => _currentStep = 2);
-                      } else {
-                        _submitReport();
-                      }
-                    },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.blue,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
+                          ),
+                          // Bottom label
+                          Positioned(
+                            bottom: 12,
+                            left: 12,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: AppTheme.neonGreen.withValues(alpha: 0.9),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.check_circle, color: Colors.white, size: 13),
+                                  const SizedBox(width: 5),
+                                  Text(s.photoReady, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ScaleTransition(
+                            scale: _pulseAnim,
+                            child: Container(
+                              width: 100,
+                              height: 100,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: AppTheme.orange.withValues(alpha: 0.15),
+                                border: Border.all(color: AppTheme.orange.withValues(alpha: 0.4), width: 2),
+                              ),
+                              child: const Icon(Icons.camera_alt, color: AppTheme.orange, size: 44),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            s.photoRequired,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            s.aiNeedsPhoto,
+                            style: const TextStyle(color: Colors.white38, fontSize: 13),
+                          ),
+                        ],
+                      ),
               ),
-              child: reportState.isLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : Text(
-                      _currentStep < 2 ? 'Continue' : 'Submit Report',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w700, fontSize: 15),
-                    ),
             ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _GlassOutlinedButton(
+                  onTap: () => ref.read(reportProvider.notifier).pickImage(fromCamera: false),
+                  icon: Icons.photo_library_outlined,
+                  label: s.gallery,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: _OrangeButton(
+                  onTap: () => ref.read(reportProvider.notifier).pickImage(fromCamera: true),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.camera_alt, color: Colors.white, size: 18),
+                      const SizedBox(width: 8),
+                      Text(s.openCamera, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── STEP 3: AI SCAN ───────────────────────────────────────────────────────
+
+  Widget _buildScanStep(ReportState reportState, AppStrings s) {
+    final hasResult = reportState.aiScanResult != null;
+    final isScanning = reportState.isScanning;
+    final result = reportState.aiScanResult;
+
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 8),
+          // Photo with scan overlay
+          if (reportState.selectedImagePath != null)
+            Expanded(
+              child: _GlassCard(
+                padding: EdgeInsets.zero,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.file(
+                        File(reportState.selectedImagePath!),
+                        fit: BoxFit.cover,
+                      ),
+                      if (isScanning) _buildScanOverlay(),
+                      if (hasResult) _buildResultOverlay(result!, s),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          const SizedBox(height: 16),
+          if (!hasResult && !isScanning)
+            _OrangeButton(
+              onTap: () async {
+                await ref.read(reportProvider.notifier).scanWithAI();
+              },
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.auto_awesome, color: Colors.white, size: 18),
+                  const SizedBox(width: 10),
+                  Text(s.scanWithAi, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                ],
+              ),
+            ),
+          if (isScanning) const _ScanShimmerCard(),
+          if (hasResult) _buildResultCard(result!, s),
+          if (reportState.error != null && !isScanning) ...[
+            const SizedBox(height: 8),
+            _GlassCard(
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      reportState.error!,
+                      style: const TextStyle(color: Colors.orange, fontSize: 12),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => ref.read(reportProvider.notifier).scanWithAI(),
+                    child: Text(s.retry, style: const TextStyle(color: AppTheme.orange, fontWeight: FontWeight.w700, fontSize: 13)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScanOverlay() {
+    return AnimatedBuilder(
+      animation: _scanAnim,
+      builder: (context, child) {
+        return Stack(
+          children: [
+            Container(color: AppTheme.orange.withValues(alpha: 0.08)),
+            Positioned(
+              top: _scanAnim.value * 300,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: 2,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      AppTheme.orange.withValues(alpha: 0.8),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildResultOverlay(AiScanResult result, AppStrings s) {
+    final color = result.isFree ? AppTheme.neonGreen : AppTheme.neonRed;
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: ClipRRect(
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            color: Colors.black.withValues(alpha: 0.5),
+            child: Row(
+              children: [
+                Icon(
+                  result.isFree ? Icons.check_circle : Icons.cancel,
+                  color: color,
+                  size: 28,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        result.isFree ? s.spotIsFree : s.spotIsTakenLabel,
+                        style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 15),
+                      ),
+                      Text(
+                        result.reason,
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        maxLines: 2,
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: color.withValues(alpha: 0.5)),
+                  ),
+                  child: Text(
+                    '${result.confidence}%',
+                    style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResultCard(AiScanResult result, AppStrings s) {
+    final isFree = result.isFree;
+    final color = isFree ? AppTheme.neonGreen : AppTheme.neonRed;
+    return _GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(isFree ? Icons.check_circle : Icons.cancel, color: color, size: 22),
+              const SizedBox(width: 10),
+              Text(
+                isFree ? s.freeSpotConfirmed : s.spotAppearsTaken,
+                style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 15),
+              ),
+              const Spacer(),
+              Text('${result.confidence}%', style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 18)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Confidence bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: result.confidence / 100,
+              backgroundColor: Colors.white12,
+              valueColor: AlwaysStoppedAnimation(color),
+              minHeight: 6,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(result.reason, style: const TextStyle(color: Colors.white60, fontSize: 13)),
+        ],
+      ),
+    );
+  }
+
+  // ── STEP 4: CONFIRM & SUBMIT ──────────────────────────────────────────────
+
+  Widget _buildConfirmStep(ReportState reportState, AppStrings s) {
+    final result = reportState.aiScanResult;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 8),
+          _GlassCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _summaryRow(Icons.location_on, s.locationLabel, _address.isEmpty ? s.tapToDetectLoc : _address),
+                const Divider(color: Colors.white10, height: 24),
+                _summaryRow(Icons.access_time, s.expiresIn, s.thirtyMinutes),
+                if (result != null) ...[
+                  const Divider(color: Colors.white10, height: 24),
+                  _summaryRow(
+                    Icons.auto_awesome,
+                    s.aiResult,
+                    '${result.isFree ? s.freeLabel : s.takenLabel} · ${result.confidence}% ${s.confidenceLabel}',
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          // Points card
+          _GlassCard(
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [AppTheme.orange, Color(0xFF007799)]),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Center(child: Text('🎯', style: TextStyle(fontSize: 22))),
+                ),
+                const SizedBox(width: 14),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(s.plusTenPoints, style: const TextStyle(color: AppTheme.orange, fontWeight: FontWeight.w900, fontSize: 18)),
+                    Text(s.thanksForHelping, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          if (reportState.isLoading)
+            const Center(child: CircularProgressIndicator(color: AppTheme.orange))
+          else
+            _OrangeButton(
+              onTap: _submitReport,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.send_rounded, color: Colors.white, size: 18),
+                  const SizedBox(width: 10),
+                  Text(s.submitReport, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                ],
+              ),
+            ),
+          if (reportState.error != null) ...[
+            const SizedBox(height: 12),
+            Text(reportState.error!, style: const TextStyle(color: AppTheme.neonRed, fontSize: 13), textAlign: TextAlign.center),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: AppTheme.orange, size: 18),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+              Text(value, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+            ],
           ),
         ),
       ],
     );
   }
+
+  // ── BOTTOM NAV ────────────────────────────────────────────────────────────
+
+  Widget _buildBottomBar(ReportState reportState, AppStrings s) {
+    final canNext = switch (_currentStep) {
+      0 => _lat != null,
+      1 => reportState.selectedImagePath != null,
+      2 => reportState.aiScanResult != null && !reportState.isScanning,
+      _ => true,
+    };
+
+    if (_currentStep == 3) return const SizedBox.shrink(); // submit is inside the step
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+      child: _OrangeButton(
+        onTap: canNext ? _nextStep : null,
+        child: Text(
+          _currentStep == 2 ? s.continueToSubmit : s.continue_,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
+        ),
+      ),
+    );
+  }
 }
 
-class _OutlineButton extends StatelessWidget {
+// ── Shared UI Components ───────────────────────────────────────────────────
+
+class _GlassCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+
+  const _GlassCard({required this.child, this.padding});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: padding ?? const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class _OrangeButton extends StatefulWidget {
+  final VoidCallback? onTap;
+  final Widget child;
+
+  const _OrangeButton({required this.onTap, required this.child});
+
+  @override
+  State<_OrangeButton> createState() => _OrangeButtonState();
+}
+
+class _OrangeButtonState extends State<_OrangeButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onTap != null;
+    return GestureDetector(
+      onTap: widget.onTap,
+      onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+      onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+      onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+      child: AnimatedScale(
+        scale: _pressed ? 0.97 : 1.0,
+        duration: const Duration(milliseconds: 90),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          height: 54,
+          decoration: BoxDecoration(
+            gradient: enabled
+                ? const LinearGradient(colors: [AppTheme.energy, Color(0xFFBB0055)])
+                : null,
+            color: enabled ? null : Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: enabled
+                ? [BoxShadow(color: AppTheme.energy.withValues(alpha: _pressed ? 0.25 : 0.45), blurRadius: _pressed ? 8 : 18, offset: const Offset(0, 6))]
+                : [],
+          ),
+          child: Center(child: widget.child),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassOutlinedButton extends StatelessWidget {
+  final VoidCallback? onTap;
   final IconData icon;
   final String label;
-  final bool isDark;
-  final VoidCallback onTap;
 
-  const _OutlineButton({
-    required this.icon,
-    required this.label,
-    required this.isDark,
-    required this.onTap,
-  });
+  const _GlassOutlinedButton({required this.onTap, required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        height: 52,
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1A1F2E) : Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.1)
-                : const Color(0xFFE2E8F0),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            height: 54,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: Colors.white60, size: 18),
+                const SizedBox(width: 6),
+                Text(label, style: const TextStyle(color: Colors.white60, fontWeight: FontWeight.w600, fontSize: 14)),
+              ],
+            ),
           ),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+      ),
+    );
+  }
+}
+
+// ── Shimmer skeleton shown while AI scans ─────────────────────────────────────
+class _ScanShimmerCard extends StatelessWidget {
+  const _ScanShimmerCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer.fromColors(
+      baseColor: AppTheme.card,
+      highlightColor: AppTheme.cardBorder,
+      period: const Duration(milliseconds: 1200),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.cardBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 18, color: AppTheme.blue),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                  color: AppTheme.blue,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14),
+            // Status row skeleton
+            Row(
+              children: [
+                Container(width: 24, height: 24, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12))),
+                const SizedBox(width: 10),
+                Container(width: 140, height: 14, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6))),
+                const Spacer(),
+                Container(width: 40, height: 20, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6))),
+              ],
+            ),
+            const SizedBox(height: 14),
+            // Progress bar skeleton
+            Container(
+              height: 6,
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(3)),
+            ),
+            const SizedBox(height: 12),
+            // Reason text skeleton — two lines
+            Container(width: double.infinity, height: 11, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+            const SizedBox(height: 6),
+            Container(width: 180, height: 11, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+            const SizedBox(height: 12),
+            // Label below
+            Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.orange.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'AI scanning your photo…',
+                    style: TextStyle(color: AppTheme.orange.withValues(alpha: 0.7), fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

@@ -1,18 +1,26 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:percent_indicator/linear_percent_indicator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../models/parking_spot_model.dart';
 import '../../../../providers/map_provider.dart';
+import '../../../../providers/auth_provider.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_toast.dart';
+import '../../../../core/l10n/app_strings.dart';
+import '../../../../providers/locale_provider.dart';
 import 'spot_photo_viewer.dart';
 
 class SpotBottomSheet extends ConsumerStatefulWidget {
   final ParkingSpot spot;
+  final ScrollController? scrollController;
 
-  const SpotBottomSheet({super.key, required this.spot});
+  const SpotBottomSheet({super.key, required this.spot, this.scrollController});
 
   @override
   ConsumerState<SpotBottomSheet> createState() => _SpotBottomSheetState();
@@ -20,6 +28,10 @@ class SpotBottomSheet extends ConsumerStatefulWidget {
 
 class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
   Timer? _countdownTimer;
+  bool _isMarkingTaken = false;
+  bool _isParking = false;
+
+  static const double _maxRadiusMeters = 50.0;
 
   @override
   void initState() {
@@ -35,6 +47,153 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
     super.dispose();
   }
 
+  /// Haversine distance in meters between two lat/lng points.
+  double _distanceMeters(double lat1, double lng1, double lat2, double lng2) {
+    const r = 6371000.0;
+    final dLat = (lat2 - lat1) * math.pi / 180;
+    final dLng = (lng2 - lng1) * math.pi / 180;
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1 * math.pi / 180) *
+            math.cos(lat2 * math.pi / 180) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+
+  Future<void> _markAsTaken() async {
+    if (_isMarkingTaken) return;
+    final s = ref.read(appStringsProvider);
+    HapticFeedback.mediumImpact();
+    setState(() => _isMarkingTaken = true);
+
+    try {
+      // Web doesn't support Geolocator — skip proximity check
+      if (!kIsWeb) {
+        final permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied ||
+            permission == LocationPermission.deniedForever) {
+          await Geolocator.requestPermission();
+        }
+
+        final position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        ).timeout(const Duration(seconds: 8));
+
+        final distance = _distanceMeters(
+          position.latitude, position.longitude,
+          widget.spot.lat, widget.spot.lng,
+        );
+
+        if (distance > _maxRadiusMeters) {
+          if (mounted) {
+            setState(() => _isMarkingTaken = false);
+            showToast(context,
+              type: ToastType.warning,
+              title: s.tooFarAway,
+              subtitle: s.tooFarSubtitle(distance.toInt()),
+            );
+          }
+          return;
+        }
+      }
+
+      // Within range — mark as taken
+      Navigator.pop(context);
+      await ref.read(firestoreServiceProvider).markSpotTaken(widget.spot.id);
+      ref.read(parkingSpotsProvider.notifier).removeExpiredSpots();
+
+      if (context.mounted) {
+        showToast(context,
+          type: ToastType.info,
+          title: s.spotMarkedTaken,
+          subtitle: s.thanksAccurate,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isMarkingTaken = false);
+        showToast(context,
+          type: ToastType.error,
+          title: s.locationUnavailable,
+          subtitle: s.makeGpsEnabled,
+        );
+      }
+    }
+  }
+
+  Future<void> _iParkHere() async {
+    if (_isParking) return;
+    final s = ref.read(appStringsProvider);
+    HapticFeedback.heavyImpact();
+    setState(() => _isParking = true);
+
+    try {
+      if (!kIsWeb) {
+        final permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied ||
+            permission == LocationPermission.deniedForever) {
+          await Geolocator.requestPermission();
+        }
+
+        final position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        ).timeout(const Duration(seconds: 8));
+
+        final distance = _distanceMeters(
+          position.latitude, position.longitude,
+          widget.spot.lat, widget.spot.lng,
+        );
+
+        if (distance > _maxRadiusMeters) {
+          if (mounted) {
+            setState(() => _isParking = false);
+            showToast(context,
+              type: ToastType.warning,
+              title: s.driveToSpotFirst,
+              subtitle: s.driveSubtitle(distance.toInt()),
+            );
+          }
+          return;
+        }
+      }
+
+      // Mark spot as taken in Firestore
+      await ref.read(firestoreServiceProvider).markSpotTaken(widget.spot.id);
+
+      // Award +5 points to the user who parked
+      final userId = ref.read(currentUserProvider)?.uid;
+      if (userId != null) {
+        await ref.read(firestoreServiceProvider).updateUserPoints(userId, 5);
+      }
+
+      ref.read(parkingSpotsProvider.notifier).removeExpiredSpots();
+
+      // Double-thump — "confirmed" pattern like Uber ride match
+      HapticFeedback.heavyImpact();
+      await Future.delayed(const Duration(milliseconds: 110));
+      HapticFeedback.heavyImpact();
+
+      if (mounted) {
+        Navigator.pop(context);
+        showToast(context,
+          type: ToastType.success,
+          title: s.enjoySpot,
+          subtitle: s.ptsAdded,
+          duration: const Duration(seconds: 4),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isParking = false);
+        showToast(context,
+          type: ToastType.error,
+          title: s.locationUnavailable,
+          subtitle: s.makeGpsEnabled,
+        );
+      }
+    }
+  }
+
   Future<void> _navigateToSpot() async {
     final lat = widget.spot.lat;
     final lng = widget.spot.lng;
@@ -45,6 +204,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
       return;
     }
 
+    // Try Waze first, fall back to Google Maps
     final wazeUrl = Uri.parse('waze://?ll=$lat,$lng&navigate=yes');
     if (await canLaunchUrl(wazeUrl)) {
       await launchUrl(wazeUrl);
@@ -55,6 +215,7 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
       await launchUrl(gmapsUrl);
       return;
     }
+    // Web fallback
     final webUrl = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lng');
     await launchUrl(webUrl, mode: LaunchMode.externalApplication);
   }
@@ -62,508 +223,436 @@ class _SpotBottomSheetState extends ConsumerState<SpotBottomSheet> {
   Color _statusColor(SpotStatus status) {
     switch (status) {
       case SpotStatus.available:
-        return const Color(0xFF22C55E);
+        return AppTheme.secondaryColor;
       case SpotStatus.soonAvailable:
-        return const Color(0xFFF59E0B);
+        return Colors.orange;
       case SpotStatus.lowConfidence:
-        return const Color(0xFFEF4444);
+        return Colors.red;
       case SpotStatus.taken:
-        return const Color(0xFF94A3B8);
+        return Colors.grey;
     }
   }
 
-  String _statusLabel(SpotStatus status) {
+  String _statusLabel(SpotStatus status, AppStrings s) {
     switch (status) {
-      case SpotStatus.available:
-        return 'Available';
-      case SpotStatus.soonAvailable:
-        return 'Soon Available';
-      case SpotStatus.lowConfidence:
-        return 'Low Confidence';
-      case SpotStatus.taken:
-        return 'Taken';
+      case SpotStatus.available:       return s.statusAvailable;
+      case SpotStatus.soonAvailable:   return s.statusSoonAvailable;
+      case SpotStatus.lowConfidence:   return s.statusLowConfidence;
+      case SpotStatus.taken:           return s.statusTaken;
     }
-  }
-
-  IconData _statusIcon(SpotStatus status) {
-    switch (status) {
-      case SpotStatus.available:
-        return Icons.check_circle_rounded;
-      case SpotStatus.soonAvailable:
-        return Icons.schedule_rounded;
-      case SpotStatus.lowConfidence:
-        return Icons.warning_rounded;
-      case SpotStatus.taken:
-        return Icons.block_rounded;
-    }
-  }
-
-  String _timeAgo(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 1) return 'just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    return '${diff.inHours}h ago';
-  }
-
-  String _timeRemaining(DateTime expiresAt) {
-    final remaining = expiresAt.difference(DateTime.now());
-    if (remaining.isNegative) return 'Expired';
-    if (remaining.inSeconds < 60) return '${remaining.inSeconds}s';
-    if (remaining.inMinutes < 60) return '${remaining.inMinutes}min';
-    return '${remaining.inHours}h ${remaining.inMinutes % 60}m';
   }
 
   Color _timeRemainingColor(DateTime expiresAt) {
     final remaining = expiresAt.difference(DateTime.now());
-    if (remaining.isNegative) return const Color(0xFF94A3B8);
-    if (remaining.inMinutes < 5) return const Color(0xFFEF4444);
-    if (remaining.inMinutes < 15) return const Color(0xFFF59E0B);
-    return AppTheme.blue;
-  }
-
-  double _timeRemainingFraction(DateTime expiresAt, DateTime reportedAt) {
-    final total = expiresAt.difference(reportedAt).inSeconds;
-    final remaining = expiresAt.difference(DateTime.now()).inSeconds;
-    if (total <= 0) return 0;
-    return (remaining / total).clamp(0.0, 1.0);
+    if (remaining.isNegative) return Colors.white24;
+    if (remaining.inMinutes < 5) return AppTheme.neonRed;
+    if (remaining.inMinutes < 15) return AppTheme.neonYellow;
+    return AppTheme.orange;
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = ref.watch(appStringsProvider);
     final spot = widget.spot;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final statusColor = _statusColor(spot.status);
+    final statusColor = _statusColor(spot.computedStatus);
     final confidencePercent = (spot.confidence * 100).toInt();
+    final aiPercent = (spot.aiConfidence * 100).toInt();
     final timeColor = _timeRemainingColor(spot.expiresAt);
-    final timeFraction = _timeRemainingFraction(spot.expiresAt, spot.reportedAt);
-    final bg = isDark ? const Color(0xFF1A1F2E) : Colors.white;
-    final surface = isDark ? const Color(0xFF252B3B) : const Color(0xFFF8FAFC);
-    final textPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
-    final textMuted = isDark ? const Color(0xFF8B9CB8) : const Color(0xFF64748B);
 
     return Container(
       decoration: BoxDecoration(
-        color: bg,
+        color: AppTheme.card,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        border: Border(
+          top: BorderSide(color: statusColor.withValues(alpha: 0.9), width: 2.5),
+          left: BorderSide(color: statusColor.withValues(alpha: 0.18), width: 1),
+          right: BorderSide(color: statusColor.withValues(alpha: 0.18), width: 1),
+        ),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
-            blurRadius: 32,
-            offset: const Offset(0, -8),
-          ),
+          BoxShadow(color: statusColor.withValues(alpha: 0.3), blurRadius: 52, offset: const Offset(0, -8)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.55), blurRadius: 24, offset: const Offset(0, -4)),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: isDark ? Colors.white.withValues(alpha: 0.15) : const Color(0xFFE2E8F0),
-                borderRadius: BorderRadius.circular(2),
+      child: SingleChildScrollView(
+        controller: widget.scrollController,
+        physics: const ClampingScrollPhysics(),
+        child: Padding(
+        padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).padding.bottom + 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
-          ),
-
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Status header row
-                Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(_statusIcon(spot.status), color: statusColor, size: 22),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _statusLabel(spot.status),
-                            style: TextStyle(
-                              color: textPrimary,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.3,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Reported ${_timeAgo(spot.reportedAt)}',
-                            style: TextStyle(color: textMuted, fontSize: 13),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Time remaining pill
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: timeColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.timer_rounded, size: 13, color: timeColor),
-                          const SizedBox(width: 4),
-                          Text(
-                            _timeRemaining(spot.expiresAt),
-                            style: TextStyle(
-                              color: timeColor,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 20),
-
-                // Confidence + time bar card
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: surface,
-                    borderRadius: BorderRadius.circular(16),
+                    color: statusColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: statusColor),
                   ),
-                  child: Column(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Confidence
-                      Row(
-                        children: [
-                          Text(
-                            'Confidence',
-                            style: TextStyle(
-                              color: textMuted,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: 0.4,
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            '$confidencePercent%',
-                            style: TextStyle(
-                              color: statusColor,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: statusColor,
+                          boxShadow: [
+                            BoxShadow(color: statusColor, blurRadius: 6, spreadRadius: 1),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      LinearPercentIndicator(
-                        percent: spot.confidence.clamp(0.0, 1.0),
-                        lineHeight: 6,
-                        backgroundColor: isDark
-                            ? Colors.white.withValues(alpha: 0.08)
-                            : const Color(0xFFE2E8F0),
-                        progressColor: statusColor,
-                        barRadius: const Radius.circular(3),
-                        padding: EdgeInsets.zero,
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      // Time remaining bar
-                      Row(
-                        children: [
-                          Text(
-                            'Time Remaining',
-                            style: TextStyle(
-                              color: textMuted,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: 0.4,
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            _timeRemaining(spot.expiresAt),
-                            style: TextStyle(
-                              color: timeColor,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      LinearPercentIndicator(
-                        percent: timeFraction,
-                        lineHeight: 6,
-                        backgroundColor: isDark
-                            ? Colors.white.withValues(alpha: 0.08)
-                            : const Color(0xFFE2E8F0),
-                        progressColor: timeColor,
-                        barRadius: const Radius.circular(3),
-                        padding: EdgeInsets.zero,
+                      const SizedBox(width: 7),
+                      Text(
+                        _statusLabel(spot.computedStatus, s),
+                        style: TextStyle(color: statusColor, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
                 ),
-
-                // Note
-                if (spot.note != null && spot.note!.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: surface,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.notes_rounded, size: 16, color: textMuted),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            spot.note!,
-                            style: TextStyle(color: textPrimary, fontSize: 14, height: 1.4),
-                          ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: timeColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.timer_outlined, size: 14, color: timeColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        s.timeRemaining(spot.expiresAt),
+                        style: TextStyle(
+                          color: timeColor,
+                          fontWeight: FontWeight.w600,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
-
-                // Photo
-                if (spot.photoUrl != null && spot.photoUrl!.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Stack(
-                      children: [
-                        SpotPhotoThumbnail(photoUrl: spot.photoUrl!),
-                        Positioned(
-                          bottom: 10,
-                          right: 10,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.6),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.zoom_in_rounded, color: Colors.white, size: 13),
-                                SizedBox(width: 4),
-                                Text('Tap to expand',
-                                    style: TextStyle(color: Colors.white, fontSize: 11)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 20),
-
-                // Navigate button
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _navigateToSpot,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.blue,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.navigation_rounded, size: 20),
-                        SizedBox(width: 8),
-                        Text(
-                          'Navigate',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                // Mark as taken
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: OutlinedButton(
-                    onPressed: () async {
-                      Navigator.pop(context);
-                      await ref.read(firestoreServiceProvider).markSpotTaken(spot.id);
-                      ref.read(parkingSpotsProvider.notifier).removeExpiredSpots();
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text('Spot marked as taken — thanks!'),
-                            backgroundColor: isDark ? const Color(0xFF1E293B) : const Color(0xFF0F172A),
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        );
-                      }
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: textPrimary,
-                      side: BorderSide(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.12)
-                            : const Color(0xFFE2E8F0),
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    child: const Text(
-                      'Mark as Taken',
-                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                // Deny / Confirm row
-                Row(
-                  children: [
-                    Expanded(
-                      child: _ActionChip(
-                        label: 'Not There',
-                        icon: Icons.thumb_down_rounded,
-                        color: const Color(0xFFEF4444),
-                        isDark: isDark,
-                        onTap: () {
-                          ref.read(firestoreServiceProvider).denySpot(spot.id, 'local_user');
-                          ref.read(parkingSpotsProvider.notifier).updateSpot(
-                                spot.copyWith(
-                                  confidence: (spot.confidence - 0.1).clamp(0.0, 1.0),
-                                ),
-                              );
-                          Navigator.pop(context);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text('Spot denied'),
-                                backgroundColor: isDark ? const Color(0xFF1E293B) : const Color(0xFF0F172A),
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _ActionChip(
-                        label: 'Still Free',
-                        icon: Icons.thumb_up_rounded,
-                        color: const Color(0xFF22C55E),
-                        isDark: isDark,
-                        onTap: () {
-                          ref.read(firestoreServiceProvider).confirmSpot(spot.id, 'local_user');
-                          ref.read(parkingSpotsProvider.notifier).updateSpot(
-                                spot.copyWith(
-                                  confidence: (spot.confidence + 0.1).clamp(0.0, 1.0),
-                                ),
-                              );
-                          Navigator.pop(context);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text('Spot confirmed! +5 points'),
-                                backgroundColor: const Color(0xFF22C55E),
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
-          ),
-        ],
+            const SizedBox(height: 20),
+            // ── Hero confidence number ─────────────────────────────────────
+            Center(
+              child: Column(
+                children: [
+                  Text(
+                    '$confidencePercent%',
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 58,
+                      fontWeight: FontWeight.w900,
+                      height: 1.0,
+                      letterSpacing: -2,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    s.liveConfidence,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.35),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            LinearPercentIndicator(
+              percent: spot.confidence.clamp(0.0, 1.0),
+              lineHeight: 8,
+              backgroundColor: Colors.white.withValues(alpha: 0.08),
+              progressColor: statusColor,
+              barRadius: const Radius.circular(4),
+              padding: EdgeInsets.zero,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _MiniStat(
+                    label: s.aiScan,
+                    value: '$aiPercent%',
+                    icon: Icons.auto_awesome,
+                    color: AppTheme.orange,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _MiniStat(
+                    label: s.timeFactor,
+                    value: s.timeRemaining(spot.expiresAt),
+                    icon: Icons.timer_outlined,
+                    color: timeColor,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Icon(Icons.access_time, size: 16, color: Colors.white30),
+                const SizedBox(width: 6),
+                Text(
+                  s.reported(spot.reportedAt),
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ),
+            if (spot.note != null && spot.note!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.notes, size: 16, color: Colors.white30),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      spot.note!,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            // Photo thumbnail
+            if (spot.photoUrl != null && spot.photoUrl!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Stack(
+                children: [
+                  SpotPhotoThumbnail(photoUrl: spot.photoUrl!),
+                  Positioned(
+                    bottom: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.zoom_in, color: Colors.white, size: 14),
+                          const SizedBox(width: 4),
+                          Text(
+                            s.tapToExpand,
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _navigateToSpot,
+                icon: const Icon(Icons.navigation_outlined),
+                label: Text(
+                  s.navigate,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  shadowColor: AppTheme.orange.withValues(alpha: 0.5),
+                  elevation: 8,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // I Parked Here — primary CTA for the hunter
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isParking ? null : _iParkHere,
+                icon: _isParking
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('🎉', style: TextStyle(fontSize: 18)),
+                label: Text(
+                  _isParking ? s.checkingLocation : s.iParkHere,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.energy,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  elevation: 8,
+                  shadowColor: AppTheme.energy.withValues(alpha: 0.5),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            // Mark as Taken — only allowed within 50m
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isMarkingTaken ? null : _markAsTaken,
+                icon: _isMarkingTaken
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.no_meeting_room_outlined),
+                label: Text(_isMarkingTaken ? s.checkingLocation : s.markAsTaken),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueGrey,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      ref
+                          .read(firestoreServiceProvider)
+                          .denySpot(spot.id, 'local_user');
+                      ref.read(parkingSpotsProvider.notifier).updateSpot(
+                            spot.copyWith(
+                              aiConfidence:
+                                  (spot.aiConfidence - 0.1).clamp(0.0, 1.0),
+                            ),
+                          );
+                      Navigator.pop(context);
+                      if (context.mounted) {
+                        showToast(context,
+                          type: ToastType.warning,
+                          title: s.spotReportedGone,
+                          subtitle: s.confidenceLowered,
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.thumb_down_outlined, color: Colors.red),
+                    label: Text(s.notThere,
+                        style: const TextStyle(color: Colors.red)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.red),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      ref
+                          .read(firestoreServiceProvider)
+                          .confirmSpot(spot.id, 'local_user');
+                      ref.read(parkingSpotsProvider.notifier).updateSpot(
+                            spot.copyWith(
+                              aiConfidence:
+                                  (spot.aiConfidence + 0.1).clamp(0.0, 1.0),
+                            ),
+                          );
+                      Navigator.pop(context);
+                      if (context.mounted) {
+                        showToast(context,
+                          type: ToastType.success,
+                          title: s.spotConfirmed,
+                          subtitle: s.ptsThanksIntel,
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.thumb_up_outlined),
+                    label: Text(s.stillFree),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.secondaryColor,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
       ),
     );
   }
 }
 
-class _ActionChip extends StatelessWidget {
+class _MiniStat extends StatelessWidget {
   final String label;
+  final String value;
   final IconData icon;
   final Color color;
-  final bool isDark;
-  final VoidCallback onTap;
 
-  const _ActionChip({
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.isDark,
-    required this.onTap,
-  });
+  const _MiniStat({required this.label, required this.value, required this.icon, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 50,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withValues(alpha: 0.25)),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 7),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-              ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: TextStyle(color: color.withValues(alpha: 0.7), fontSize: 10)),
+                Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

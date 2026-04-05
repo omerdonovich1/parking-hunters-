@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../models/parking_spot_model.dart';
+import '../../../../providers/locale_provider.dart';
 
 /// Which status filters are currently active (null = all shown).
 final activeFiltersProvider =
@@ -12,12 +13,12 @@ class MapFilterBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final active = ref.watch(activeFiltersProvider);
+    final s = ref.watch(appStringsProvider);
 
     final filters = [
-      _Filter(SpotStatus.available, '🟢', 'Available', const Color(0xFF4CAF50)),
-      _Filter(SpotStatus.soonAvailable, '🟡', 'Soon', const Color(0xFFFFA726)),
-      _Filter(
-          SpotStatus.lowConfidence, '🔴', 'Low conf.', const Color(0xFFEF5350)),
+      _Filter(SpotStatus.available, '🟢', s.filterAvailable, const Color(0xFF4CAF50)),
+      _Filter(SpotStatus.soonAvailable, '🟡', s.filterSoon, const Color(0xFFFFA726)),
+      _Filter(SpotStatus.lowConfidence, '🔴', s.filterLowConf, const Color(0xFFEF5350)),
     ];
 
     return SingleChildScrollView(

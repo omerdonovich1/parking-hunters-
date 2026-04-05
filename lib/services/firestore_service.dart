@@ -1,15 +1,17 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:math' as math;
+import 'dart:math';
 import '../models/parking_spot_model.dart';
 import '../models/user_model.dart';
 import '../models/report_model.dart';
+import '../models/road_status_model.dart';
 import '../core/utils/constants.dart';
 
 class FirestoreService {
   FirebaseFirestore get _db => FirebaseFirestore.instance;
 
-  Future<String> addParkingReport(ParkingReport report) async {
+  Future<String> addParkingReport(ParkingReport report, {double aiConfidence = 0.7}) async {
     try {
       final docRef = await _db
           .collection(Constants.reportsCollection)
@@ -22,7 +24,7 @@ class FirestoreService {
         reportedBy: report.userId,
         reportedAt: report.createdAt,
         expiresAt: report.estimatedAvailableUntil,
-        confidence: 0.7,
+        aiConfidence: aiConfidence,
         status: SpotStatus.available,
         photoUrl: report.photoUrl,
         note: report.note,
@@ -36,6 +38,61 @@ class FirestoreService {
     } on FirebaseException catch (e) {
       debugPrint('Firestore addParkingReport error: $e');
       return 'mock_${DateTime.now().millisecondsSinceEpoch}';
+    }
+  }
+
+  /// Real-time stream of all active spots.
+  /// Single-field query (no composite index needed).
+  /// Taken spots and expired spots are filtered client-side.
+  Stream<List<ParkingSpot>> watchActiveSpots() {
+    try {
+      return _db
+          .collection(Constants.spotsCollection)
+          .where('expiresAt', isGreaterThan: Timestamp.now())
+          .snapshots()
+          .map((snap) => snap.docs
+              .map((d) => ParkingSpot.fromMap(d.data(), docId: d.id))
+              .where((spot) => spot.status != SpotStatus.taken)
+              .toList());
+    } catch (e) {
+      debugPrint('watchActiveSpots error: $e');
+      return Stream.value([]);
+    }
+  }
+
+  /// Resets the timer on an existing spot (deduplication).
+  Future<void> refreshSpot(String spotId, {int minutes = 60}) async {
+    try {
+      await _db.collection(Constants.spotsCollection).doc(spotId).update({
+        'expiresAt': Timestamp.fromDate(DateTime.now().add(Duration(minutes: minutes))),
+        'status': 'available',
+      });
+    } on FirebaseException catch (e) {
+      debugPrint('Firestore refreshSpot error: $e');
+    }
+  }
+
+  /// Returns the first active spot within [radiusMeters] of the given location, or null.
+  Future<ParkingSpot?> findNearbyActiveSpot(double lat, double lng, {double radiusMeters = 30}) async {
+    try {
+      final latDelta = radiusMeters / 111000.0;
+      final lngDelta = radiusMeters / (111000.0 * math.cos(lat * math.pi / 180));
+      final snap = await _db
+          .collection(Constants.spotsCollection)
+          .where('lat', isGreaterThan: lat - latDelta)
+          .where('lat', isLessThan: lat + latDelta)
+          .where('expiresAt', isGreaterThan: Timestamp.now())
+          .get();
+      for (final doc in snap.docs) {
+        final spot = ParkingSpot.fromMap(doc.data(), docId: doc.id);
+        if (spot.status == SpotStatus.taken) continue;
+        final dLng = (spot.lng - lng).abs();
+        if (dLng <= lngDelta) return spot;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('findNearbyActiveSpot error: $e');
+      return null;
     }
   }
 
@@ -77,7 +134,7 @@ class FirestoreService {
         reportedBy: 'mock_user',
         reportedAt: now.subtract(const Duration(minutes: 5)),
         expiresAt: now.add(const Duration(minutes: 55)),
-        confidence: 0.9,
+        aiConfidence: 0.9,
         status: SpotStatus.available,
         note: 'Near the corner',
       ),
@@ -88,7 +145,7 @@ class FirestoreService {
         reportedBy: 'mock_user2',
         reportedAt: now.subtract(const Duration(minutes: 20)),
         expiresAt: now.add(const Duration(minutes: 40)),
-        confidence: 0.6,
+        aiConfidence: 0.6,
         status: SpotStatus.soonAvailable,
         note: 'Blue zone',
       ),
@@ -99,7 +156,7 @@ class FirestoreService {
         reportedBy: 'mock_user3',
         reportedAt: now.subtract(const Duration(minutes: 40)),
         expiresAt: now.add(const Duration(minutes: 20)),
-        confidence: 0.3,
+        aiConfidence: 0.3,
         status: SpotStatus.lowConfidence,
       ),
       ParkingSpot(
@@ -109,7 +166,7 @@ class FirestoreService {
         reportedBy: 'mock_user4',
         reportedAt: now.subtract(const Duration(minutes: 10)),
         expiresAt: now.add(const Duration(minutes: 50)),
-        confidence: 0.85,
+        aiConfidence: 0.85,
         status: SpotStatus.available,
         note: 'Free parking',
       ),
@@ -120,7 +177,7 @@ class FirestoreService {
         reportedBy: 'mock_user5',
         reportedAt: now.subtract(const Duration(minutes: 15)),
         expiresAt: now.add(const Duration(minutes: 45)),
-        confidence: 0.75,
+        aiConfidence: 0.75,
         status: SpotStatus.available,
         note: 'Street parking',
       ),
@@ -257,5 +314,95 @@ class FirestoreService {
       AppUser(id: '4', email: 'd@d.com', displayName: 'CityRoamer', points: 800, level: 3, badgeIds: ['speed_demon'], totalReports: 45, createdAt: now),
       AppUser(id: '5', email: 'e@e.com', displayName: 'Demo Hunter', points: 150, level: 1, badgeIds: ['first_hunter'], totalReports: 12, createdAt: now),
     ];
+  }
+
+  /// Get nearby road status and incidents
+  Stream<List<RoadStatus>> getNearbyRoadStatus(
+    double lat,
+    double lng,
+    double radiusKm,
+  ) {
+    try {
+      final query = _db
+          .collection('road_status')
+          .where('lat', isGreaterThan: lat - radiusKm / 111)
+          .where('lat', isLessThan: lat + radiusKm / 111)
+          .snapshots();
+
+      return query.map((snapshot) {
+        return snapshot.docs
+            .map((doc) => RoadStatus.fromFirestore(doc))
+            .where((status) {
+          // Filter by actual distance (rough Firestore geo query)
+          final distance = _calculateDistance(lat, lng, status.lat, status.lng);
+          return distance <= radiusKm;
+        }).toList();
+      });
+    } on FirebaseException catch (e) {
+      debugPrint('Firestore getNearbyRoadStatus error: $e');
+      return Stream.value([]);
+    } catch (e) {
+      debugPrint('getNearbyRoadStatus error: $e');
+      return Stream.value([]);
+    }
+  }
+
+  /// Report traffic/incident
+  Future<void> reportRoadIncident({
+    required double lat,
+    required double lng,
+    required IncidentType type,
+    required String description,
+    required String userId,
+  }) async {
+    try {
+      final incidentId = _db.collection('road_status').doc().id;
+      final incident = RoadIncident(
+        id: incidentId,
+        description: description,
+        type: type,
+        lat: lat,
+        lng: lng,
+        reportedAt: DateTime.now(),
+        reportedBy: userId,
+      );
+
+      await _db.collection('road_status').add({
+        'lat': lat,
+        'lng': lng,
+        'trafficLevel': 'moderate',
+        'reportCount': 1,
+        'incidents': [incident.toJson()],
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (e) {
+      debugPrint('Firestore reportRoadIncident error: $e');
+    }
+  }
+
+  /// Confirm traffic incident (user confirms existing incident)
+  Future<void> confirmRoadIncident(String roadStatusId) async {
+    try {
+      await _db
+          .collection('road_status')
+          .doc(roadStatusId)
+          .update({
+        'reportCount': FieldValue.increment(1),
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (e) {
+      debugPrint('Firestore confirmRoadIncident error: $e');
+    }
+  }
+
+  double _calculateDistance(double lat1, double lng1, double lat2, double lng2) {
+    const p = 0.017453292519943295; // Math.PI / 180
+    final a = 0.5 -
+        cos((lat2 - lat1) * p) / 2 +
+        cos(lat1 * p) *
+            cos(lat2 * p) *
+            (1 - cos((lng2 - lng1) * p)) /
+            2;
+    return 12742 * asin(sqrt(a)); // 2 * R; R = 6371 km
   }
 }
