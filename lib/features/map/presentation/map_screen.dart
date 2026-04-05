@@ -280,16 +280,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
               },
             ),
             children: [
-              // ── Base tiles: roads only, no POI clutter ────────────────────
+              // ── Light map tiles (Carto Voyager) ───────────────────────────
               TileLayer(
-                urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
-                subdomains: const ['a', 'b', 'c', 'd'],
-                userAgentPackageName: 'com.example.parking_hunter',
-                retinaMode: true,
-              ),
-              // ── Labels overlay: street names only ─────────────────────────
-              TileLayer(
-                urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
+                urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
                 subdomains: const ['a', 'b', 'c', 'd'],
                 userAgentPackageName: 'com.example.parking_hunter',
                 retinaMode: true,
