@@ -9,6 +9,7 @@ import 'package:latlong2/latlong.dart' hide Path;
 import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../models/parking_spot_model.dart';
 import '../../../providers/map_provider.dart';
 import '../../../providers/locale_provider.dart';
@@ -85,6 +86,12 @@ List<_Cluster> _buildClusters(List<ParkingSpot> spots, double zoom) {
     if (!merged) clusters.add(_Cluster([spot]));
   }
   return clusters;
+}
+
+/// Maps confidence (0.0–1.0) → HSL heat color: red (0°) → yellow → green (120°).
+Color _confidenceColor(double pct) {
+  final hue = (pct * 120.0).clamp(0.0, 120.0);
+  return HSLColor.fromAHSL(1.0, hue, 1.0, 0.45).toColor();
 }
 
 class MapScreen extends ConsumerStatefulWidget {
@@ -349,7 +356,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 markers: _buildClusters(visible, _currentZoom).map((cluster) {
                   if (cluster.spots.length == 1) {
                     final spot = cluster.spots.first;
-                    final color = _spotColor(spot.computedStatus);
+                    final color = _confidenceColor(spot.confidence);
                     return Marker(
                       point: LatLng(spot.lat, spot.lng),
                       width: 68,
@@ -534,19 +541,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
   void _showSpotSheet(ParkingSpot spot) {
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      enableDrag: true,
-      useSafeArea: false,
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.55,
-        minChildSize: 0.3,
-        maxChildSize: 0.92,
-        snap: true,
-        snapSizes: const [0.55, 0.92],
-        builder: (_, scrollController) =>
-            SpotBottomSheet(spot: spot, scrollController: scrollController),
-      ),
+      isScrollControlled: true,
+      builder: (_) => _NavigateSheet(spot: spot),
     );
   }
 }
@@ -659,7 +656,6 @@ class _SpotMarker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final conf = '${(spot.confidence * 100).toInt()}%';
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -671,7 +667,7 @@ class _SpotMarker extends StatelessWidget {
               width: 52, height: 52,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: color.withValues(alpha: 0.08),
+                color: color.withValues(alpha: 0.10),
               ),
             ),
             // Core circle — dark fill so text is always legible
@@ -688,11 +684,11 @@ class _SpotMarker extends StatelessWidget {
               ),
               child: Center(
                 child: Text(
-                  conf,
+                  'P',
                   style: TextStyle(
                     color: color,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
                     height: 1,
                   ),
                 ),
@@ -812,13 +808,13 @@ class _GlassSearchBar extends StatelessWidget {
           height: 52,
           decoration: BoxDecoration(
             color: isSearching
-                ? Colors.white.withValues(alpha: 0.10)
-                : Colors.white.withValues(alpha: 0.07),
+                ? Colors.white.withValues(alpha: 0.97)
+                : Colors.white.withValues(alpha: 0.94),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: isSearching
-                  ? AppTheme.orange.withValues(alpha: 0.35)
-                  : Colors.white.withValues(alpha: 0.09),
+                  ? AppTheme.orange.withValues(alpha: 0.45)
+                  : Colors.black.withValues(alpha: 0.10),
               width: 1.2,
             ),
             boxShadow: [
@@ -845,13 +841,13 @@ class _GlassSearchBar extends StatelessWidget {
                       controller: controller,
                       autofocus: true,
                       style: const TextStyle(
-                          color: Colors.white,
+                          color: Colors.black87,
                           fontSize: 14,
                           fontWeight: FontWeight.w500),
                       decoration: InputDecoration(
                         hintText: hintText,
-                        hintStyle: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.3),
+                        hintStyle: const TextStyle(
+                            color: Colors.black45,
                             fontSize: 14),
                         border: InputBorder.none,
                         isDense: true,
@@ -866,11 +862,11 @@ class _GlassSearchBar extends StatelessWidget {
                       width: 28, height: 28,
                       margin: const EdgeInsets.only(right: 12),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.08),
+                        color: Colors.black.withValues(alpha: 0.07),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.close_rounded,
-                          color: Colors.white54, size: 14),
+                          color: Colors.black54, size: 14),
                     ),
                   ),
                 ])
@@ -881,12 +877,12 @@ class _GlassSearchBar extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Row(children: [
                       const Icon(Icons.search_rounded,
-                          color: Colors.white38, size: 19),
+                          color: Colors.black45, size: 19),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(hintText,
                             style: const TextStyle(
-                                color: Colors.white30, fontSize: 14)),
+                                color: Colors.black45, fontSize: 14)),
                       ),
                       // Spot count badge
                       Container(
@@ -993,7 +989,7 @@ class _StatusChipState extends State<_StatusChip> {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 220),
               curve: Curves.easeOutCubic,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
               decoration: AppTheme.statusChip(color, selected: selected),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -1122,6 +1118,11 @@ class _RadarSweepPainter extends CustomPainter {
     final cy = size.height / 2;
     final radius = size.width / 2;
 
+    // ── Strictly clip to circle boundary — no bleed outside 200 m ring ───────
+    canvas.save();
+    canvas.clipPath(
+        Path()..addOval(Rect.fromCircle(center: Offset(cx, cy), radius: radius)));
+
     // ── Trail: filled wedge sweeping 270° behind the head, fading out ────────
     const trailSweep = 5 * math.pi / 6; // 150° trail
     const trailSteps = 40;
@@ -1167,8 +1168,157 @@ class _RadarSweepPainter extends CustomPainter {
       3,
       dotPaint,
     );
+
+    canvas.restore();
   }
 
   @override
   bool shouldRepaint(_RadarSweepPainter old) => old.angle != angle;
+}
+
+// ── Navigate action sheet — Waze / Google Maps deep links ────────────────────
+class _NavigateSheet extends ConsumerWidget {
+  final ParkingSpot spot;
+  const _NavigateSheet({required this.spot});
+
+  Future<void> _launch(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final color = _confidenceColor(spot.confidence);
+    final confPct = '${(spot.confidence * 100).toInt()}%';
+    final minsAgo = DateTime.now().difference(spot.reportedAt).inMinutes;
+    final timeLabel = minsAgo < 1 ? 'just now' : '${minsAgo}m ago';
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+          decoration: BoxDecoration(
+            color: AppTheme.card,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: AppTheme.cardBorder),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Drag handle
+              Container(
+                width: 36, height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // Spot info row
+              Row(
+                children: [
+                  Container(
+                    width: 10, height: 10,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(color: color.withValues(alpha: 0.7), blurRadius: 8)
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Parking spot — $confPct confidence',
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    timeLabel,
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              // Waze
+              _NavButton(
+                icon: Icons.navigation_rounded,
+                label: 'Navigate with Waze',
+                color: const Color(0xFF09C0F0),
+                onTap: () {
+                  Navigator.pop(context);
+                  _launch('waze://?ll=${spot.lat},${spot.lng}&navigate=yes');
+                },
+              ),
+              const SizedBox(height: 10),
+              // Google Maps
+              _NavButton(
+                icon: Icons.map_rounded,
+                label: 'Navigate with Google Maps',
+                color: const Color(0xFF4285F4),
+                onTap: () {
+                  Navigator.pop(context);
+                  _launch(
+                    'https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}',
+                  );
+                },
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.white54, fontSize: 14),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  const _NavButton({
+    required this.icon, required this.label,
+    required this.color, required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: ElevatedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 20),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          elevation: 0,
+        ),
+      ),
+    );
+  }
 }
