@@ -100,18 +100,27 @@ class AppTheme {
   );
 
   // ── Dark theme ─────────────────────────────────────────────────────────────
-  // ── Status chip decoration — glow pill ────────────────────────────────────
+  // ── Status chip decoration — opaque pill readable on map tiles ───────────
   static BoxDecoration statusChip(Color color, {bool selected = false}) =>
       BoxDecoration(
-        color: selected ? color.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.04),
+        // White-ish base keeps text readable on both light and dark map tiles
+        color: selected
+            ? Color.lerp(Colors.white, color, 0.18)!.withValues(alpha: 0.96)
+            : Colors.white.withValues(alpha: 0.88),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: selected ? color.withValues(alpha: 0.55) : Colors.white.withValues(alpha: 0.08),
+          color: selected ? color.withValues(alpha: 0.70) : Colors.black.withValues(alpha: 0.08),
           width: 1.2,
         ),
-        boxShadow: selected
-            ? [BoxShadow(color: color.withValues(alpha: 0.30), blurRadius: 14, spreadRadius: 0)]
-            : [],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+          if (selected)
+            BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 12),
+        ],
       );
 
   static ThemeData get darkTheme {

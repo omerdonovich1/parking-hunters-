@@ -90,69 +90,56 @@ class _FloatingPillNav extends StatelessWidget {
       _NavDef(icon: Icons.emoji_events_outlined,  iconFilled: Icons.emoji_events_rounded,    label: s.navRanks),
     ];
     final bottomPad = MediaQuery.of(context).padding.bottom;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(28, 0, 28, (bottomPad > 0 ? bottomPad : 16) + 12),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(36),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 32, sigmaY: 32),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // ── Top-edge gradient bleeds upward into the map (smooth transition) ──
+        IgnorePointer(
           child: Container(
-            height: 68,
+            height: 36,
             decoration: BoxDecoration(
-              // two-tone layered background — richer depth
               gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
                 colors: [
-                  AppTheme.card.withValues(alpha: 0.92),
-                  AppTheme.surface.withValues(alpha: 0.88),
+                  Colors.black.withValues(alpha: 0.92),
+                  Colors.black.withValues(alpha: 0.0),
                 ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+                stops: const [0.0, 1.0],
               ),
-              borderRadius: BorderRadius.circular(36),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.07),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.55),
-                  blurRadius: 48,
-                  spreadRadius: -4,
-                  offset: const Offset(0, 12),
-                ),
-                BoxShadow(
-                  color: AppTheme.orange.withValues(alpha: 0.05),
-                  blurRadius: 24,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Stack(
-              children: [
-                // Sliding active background pill
-                _SlidingIndicator(
-                  selectedIndex: selectedIndex,
-                  itemCount: items.length,
-                ),
-                Row(
-                  children: List.generate(items.length, (i) {
-                    return Expanded(
-                      child: GestureDetector(
-                        onTap: () => onTap(i),
-                        behavior: HitTestBehavior.opaque,
-                        child: _PillNavItem(
-                          def: items[i],
-                          selected: i == selectedIndex,
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-              ],
             ),
           ),
         ),
-      ),
+        // ── Solid black bar ──────────────────────────────────────────────────
+        Container(
+          height: 64 + bottomPad,
+          color: Colors.black,
+          padding: EdgeInsets.only(bottom: bottomPad),
+          child: Stack(
+            children: [
+              // Sliding active pill indicator
+              _SlidingIndicator(
+                selectedIndex: selectedIndex,
+                itemCount: items.length,
+              ),
+              Row(
+                children: List.generate(items.length, (i) {
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap: () => onTap(i),
+                      behavior: HitTestBehavior.opaque,
+                      child: _PillNavItem(
+                        def: items[i],
+                        selected: i == selectedIndex,
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -214,7 +201,7 @@ class _PillNavItem extends StatelessWidget {
           child: Icon(
             selected ? def.iconFilled : def.icon,
             key: ValueKey(selected),
-            color: selected ? AppTheme.orange : const Color(0xFF2E4A66),
+            color: selected ? AppTheme.orange : Colors.white.withValues(alpha: 0.38),
             size: 22,
           ),
         ),
@@ -222,7 +209,7 @@ class _PillNavItem extends StatelessWidget {
         AnimatedDefaultTextStyle(
           duration: const Duration(milliseconds: 200),
           style: TextStyle(
-            color: selected ? AppTheme.orange : const Color(0xFF2E4A66),
+            color: selected ? AppTheme.orange : Colors.white.withValues(alpha: 0.38),
             fontSize: 10,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             letterSpacing: selected ? 0.3 : 0,

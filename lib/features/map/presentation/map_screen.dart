@@ -110,6 +110,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
   LatLng _zoneCenter = const LatLng(Constants.defaultLat, Constants.defaultLng);
 
   late AnimationController _pulseController;
+  // Radar sweep — one full 360° rotation every 3 seconds
+  late AnimationController _radarController;
   AnimationController? _flyController;
 
   @override
@@ -119,15 +121,25 @@ class _MapScreenState extends ConsumerState<MapScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
+    _radarController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3000),
+    )..repeat();
     _initLocation();
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
+    _radarController.dispose();
     _flyController?.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  /// Restart the radar sweep from 0 — called after zone changes.
+  void _restartRadar() {
+    _radarController.forward(from: 0);
   }
 
   /// Cinematic camera pan + zoom toward [target].
@@ -183,6 +195,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         _isLoadingLocation = false;
       });
       _mapController.move(latlng, zoom);
+      _restartRadar();
       // Firestore stream auto-loads all active spots — no manual fetch needed.
     } catch (e) {
       if (mounted) setState(() => _isLoadingLocation = false);
@@ -205,6 +218,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         _searchController.clear();
       });
       _mapController.move(latlng, zoom);
+      _restartRadar();
     } catch (e) {
       debugPrint('Geocoding error: $e');
     }
@@ -287,66 +301,48 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 userAgentPackageName: 'com.example.parking_hunter',
                 retinaMode: true,
               ),
-              // ── 200 m Search Zone — 3-ring continuous wave pulse ────────
+              // ── Military radar: steady boundary ring ─────────────────────
               if (!_isLoadingLocation)
-                AnimatedBuilder(
-                  animation: _pulseController,
-                  builder: (_, __) {
-                    final t = _pulseController.value;
-                    // Three rings at 120° phase offsets → seamless ripple
-                    final r1 = t;
-                    final r2 = (t + 0.33) % 1.0;
-                    final r3 = (t + 0.66) % 1.0;
-                    return CircleLayer(
-                      circles: [
-                        // Core boundary — steady
-                        CircleMarker(
-                          point: _zoneCenter,
-                          radius: 200,
-                          useRadiusInMeter: true,
-                          color: AppTheme.neonGreen.withValues(alpha: 0.04),
-                          borderStrokeWidth: 1.5,
-                          borderColor: AppTheme.neonGreen.withValues(alpha: 0.50),
+                CircleLayer(
+                  circles: [
+                    CircleMarker(
+                      point: _zoneCenter,
+                      radius: 200,
+                      useRadiusInMeter: true,
+                      color: AppTheme.neonGreen.withValues(alpha: 0.03),
+                      borderStrokeWidth: 1.2,
+                      borderColor: AppTheme.neonGreen.withValues(alpha: 0.40),
+                    ),
+                    // GPS dot halo
+                    CircleMarker(
+                      point: _currentPosition,
+                      radius: 55,
+                      useRadiusInMeter: true,
+                      color: AppTheme.orange.withValues(alpha: 0.04),
+                      borderStrokeWidth: 0.8,
+                      borderColor: AppTheme.orange.withValues(alpha: 0.15),
+                    ),
+                  ],
+                ),
+              // ── Military radar: sweep line CustomPaint marker ─────────────
+              if (!_isLoadingLocation)
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: _zoneCenter,
+                      width: 400,
+                      height: 400,
+                      child: AnimatedBuilder(
+                        animation: _radarController,
+                        builder: (_, __) => CustomPaint(
+                          painter: _RadarSweepPainter(
+                            angle: _radarController.value * 2 * math.pi,
+                            color: AppTheme.neonGreen,
+                          ),
                         ),
-                        // Ring 1 — expands 200→250 m, fades to transparent
-                        CircleMarker(
-                          point: _zoneCenter,
-                          radius: 200 + 50 * r1,
-                          useRadiusInMeter: true,
-                          color: Colors.transparent,
-                          borderStrokeWidth: 1.2,
-                          borderColor: AppTheme.neonGreen.withValues(alpha: 0.32 * (1 - r1)),
-                        ),
-                        // Ring 2
-                        CircleMarker(
-                          point: _zoneCenter,
-                          radius: 200 + 50 * r2,
-                          useRadiusInMeter: true,
-                          color: Colors.transparent,
-                          borderStrokeWidth: 1.2,
-                          borderColor: AppTheme.neonGreen.withValues(alpha: 0.32 * (1 - r2)),
-                        ),
-                        // Ring 3
-                        CircleMarker(
-                          point: _zoneCenter,
-                          radius: 200 + 50 * r3,
-                          useRadiusInMeter: true,
-                          color: Colors.transparent,
-                          borderStrokeWidth: 1.2,
-                          borderColor: AppTheme.neonGreen.withValues(alpha: 0.32 * (1 - r3)),
-                        ),
-                        // Inner GPS halo
-                        CircleMarker(
-                          point: _currentPosition,
-                          radius: 55,
-                          useRadiusInMeter: true,
-                          color: AppTheme.orange.withValues(alpha: 0.04),
-                          borderStrokeWidth: 0.8,
-                          borderColor: AppTheme.orange.withValues(alpha: 0.15),
-                        ),
-                      ],
-                    );
-                  },
+                      ),
+                    ),
+                  ],
                 ),
               // ── Parking spot markers — clustered by zoom level ────────────
               MarkerLayer(
@@ -462,19 +458,22 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       final zoom = _zoomForRadius200m(_currentPosition.latitude, screenW);
                       setState(() => _zoneCenter = _currentPosition);
                       _mapController.move(_currentPosition, zoom);
+                      _restartRadar();
                     },
                   ),
                   const SizedBox(height: 12),
                   _SideIconButton(
                     icon: Icons.add,
                     onTap: () => _mapController.move(
-                        _currentPosition, _mapController.camera.zoom + 1),
+                        _mapController.camera.center,
+                        _mapController.camera.zoom + 1),
                   ),
                   const SizedBox(height: 12),
                   _SideIconButton(
                     icon: Icons.remove,
                     onTap: () => _mapController.move(
-                        _currentPosition, _mapController.camera.zoom - 1),
+                        _mapController.camera.center,
+                        _mapController.camera.zoom - 1),
                   ),
                 ],
               ),
@@ -1015,9 +1014,13 @@ class _StatusChipState extends State<_StatusChip> {
                   Text(
                     widget.label,
                     style: TextStyle(
-                      color: selected ? color : Colors.white38,
+                      // Dark text so chips are legible on both light map
+                      // tiles and dark overlays
+                      color: selected
+                          ? const Color(0xFF0A0A0A)
+                          : const Color(0xFF1A1A1A),
                       fontSize: 12,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
                       letterSpacing: 0.2,
                     ),
                   ),
@@ -1062,32 +1065,110 @@ class _HunterSideButton extends StatelessWidget {
   }
 }
 
-// ── Side utility icon button ─────────────────────────────────────────────────
-class _SideIconButton extends StatelessWidget {
+// ── Side utility icon button — solid black circle, pure white icon ───────────
+class _SideIconButton extends StatefulWidget {
   final IconData icon;
   final VoidCallback onTap;
   const _SideIconButton({required this.icon, required this.onTap});
 
   @override
+  State<_SideIconButton> createState() => _SideIconButtonState();
+}
+
+class _SideIconButtonState extends State<_SideIconButton> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-            ),
-            child: Icon(icon, color: Colors.white70, size: 20),
+      onTap: () { HapticFeedback.lightImpact(); widget.onTap(); },
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.90 : 1.0,
+        duration: const Duration(milliseconds: 80),
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: Colors.black,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.55),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
+          child: Icon(widget.icon, color: Colors.white, size: 20),
         ),
       ),
     );
   }
+}
+
+// ── Radar sweep CustomPainter ─────────────────────────────────────────────────
+class _RadarSweepPainter extends CustomPainter {
+  final double angle; // 0..2π, current sweep head angle
+  final Color color;
+
+  const _RadarSweepPainter({required this.angle, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final radius = size.width / 2;
+
+    // ── Trail: filled wedge sweeping 270° behind the head, fading out ────────
+    const trailSweep = 5 * math.pi / 6; // 150° trail
+    const trailSteps = 40;
+    for (int i = 0; i < trailSteps; i++) {
+      final frac = i / trailSteps;
+      final stepAngle = angle - trailSweep * (1 - frac);
+      final opacity = frac * 0.18; // 0 at tail, 0.18 at head
+      final paint = Paint()
+        ..color = color.withValues(alpha: opacity)
+        ..style = PaintingStyle.fill;
+
+      final path = Path()
+        ..moveTo(cx, cy)
+        ..arcTo(
+          Rect.fromCircle(center: Offset(cx, cy), radius: radius),
+          stepAngle,
+          trailSweep / trailSteps,
+          false,
+        )
+        ..close();
+      canvas.drawPath(path, paint);
+    }
+
+    // ── Sweep head line ───────────────────────────────────────────────────────
+    final headPaint = Paint()
+      ..color = color.withValues(alpha: 0.85)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawLine(
+      Offset(cx, cy),
+      Offset(cx + radius * math.cos(angle), cy + radius * math.sin(angle)),
+      headPaint,
+    );
+
+    // ── Bright tip dot at sweep head ─────────────────────────────────────────
+    final dotPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(
+      Offset(cx + radius * math.cos(angle), cy + radius * math.sin(angle)),
+      3,
+      dotPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RadarSweepPainter old) => old.angle != angle;
 }
