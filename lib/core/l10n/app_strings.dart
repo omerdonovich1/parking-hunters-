@@ -105,14 +105,25 @@ class AppStrings {
       : 'Reported ${timeAgo(dt)}';
 
   // ── Report screen ──────────────────────────────────────────────────────────
-  String get stepPinLocation    => isHebrew ? 'סמן מיקום'                      : 'Pin Location';
+  // step titles (3-step flow)
+  String get stepGpsLock        => isHebrew ? 'נועל מיקום'                     : 'Locking Location';
   String get stepTakePhoto      => isHebrew ? 'צלם תמונה'                      : 'Take Photo';
-  String get stepAiScan         => isHebrew ? "סריקת AI"                        : 'AI Scan';
-  String get stepConfirm        => isHebrew ? 'אשר'                            : 'Confirm';
-  String get stepSubWhere       => isHebrew ? 'איפה החנייה הפנויה?'             : 'Where is the free spot?';
+  String get stepAiScan         => isHebrew ? 'בדיקת AI'                       : 'AI Verify';
+  String get stepSubGps         => isHebrew ? 'מאתר את המיקום המדויק שלך'      : 'Pinpointing your exact position';
   String get stepSubPhoto       => isHebrew ? 'צלם את מקום החנייה'              : 'Photograph the parking space';
-  String get stepSubAi          => isHebrew ? 'Claude מנתח את התמונה שלך'      : 'Claude analyzes your photo';
-  String get stepSubConfirm     => isHebrew ? 'שלח את הדיווח שלך'              : 'Submit your report';
+  String get stepSubAi          => isHebrew ? 'Claude מאמת שזה מקום חנייה פנוי': 'Claude verifies it\'s a real free spot';
+  // GPS states
+  String get lockingGps         => isHebrew ? 'נועל GPS…'                      : 'Locking GPS…';
+  String get gpsLocked          => isHebrew ? 'מיקום ננעל'                     : 'Location locked';
+  String get gpsAccuracyLabel   => isHebrew ? 'דיוק'                           : 'Accuracy';
+  String get gpsTooLow          => isHebrew ? 'דיוק GPS נמוך מדי — צא החוצה ונסה שוב' : 'GPS accuracy too low — go outside and retry';
+  String get gpsRetry           => isHebrew ? 'נסה שוב'                        : 'Retry';
+  String get openingCamera      => isHebrew ? 'פותח מצלמה…'                    : 'Opening camera…';
+  // AI rejection
+  String get notAParkingSpot    => isHebrew ? 'זה לא מקום חנייה פנוי'          : 'Not a free parking spot';
+  String get retakeForApproval  => isHebrew ? 'צלם שוב'                        : 'Retake Photo';
+  String get aiAutoSubmitting   => isHebrew ? 'מאומת! מעלה למפה…'              : 'Verified! Uploading to map…';
+  // legacy (kept for confirm step strings still referenced)
   String get tapToDetectLoc     => isHebrew ? 'לחץ לזיהוי מיקום'               : 'Tap to detect location';
   String get noLocationYet      => isHebrew ? 'אין מיקום עדיין'                : 'No location yet';
   String get detectMyLocation   => isHebrew ? 'זהה את מיקומי'                  : 'Detect My Location';
