@@ -110,11 +110,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
-  bool _hunterModeOpen = false;
   double _currentZoom = 15;
 
   // 200 m search zone centre — defaults to user's GPS, updates on geocode search
   LatLng _zoneCenter = const LatLng(Constants.defaultLat, Constants.defaultLng);
+
+  // Radar pixel radius — recalculated on every zoom change to match 200m circle
+  double _radarPixelRadius = 180.0;
 
   late AnimationController _pulseController;
   // Radar sweep — one full 360° rotation every 3 seconds
@@ -147,6 +149,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
   /// Restart the radar sweep from 0 — called after zone changes.
   void _restartRadar() {
     _radarController.forward(from: 0);
+  }
+
+  /// Recalculate radar pixel radius to always match the 200m CircleLayer boundary.
+  void _updateRadarSize() {
+    const earthCircumference = 40075016.686;
+    const tileSize = 256.0;
+    final lat = _zoneCenter.latitude;
+    final metersPerPixel = earthCircumference *
+        math.cos(lat * math.pi / 180) /
+        (tileSize * math.pow(2, _currentZoom));
+    final r = (200.0 / metersPerPixel).clamp(40.0, 800.0);
+    if (mounted) setState(() => _radarPixelRadius = r);
   }
 
   /// Cinematic camera pan + zoom toward [target].
@@ -203,6 +217,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       });
       _mapController.move(latlng, zoom);
       _restartRadar();
+      _updateRadarSize();
       // Firestore stream auto-loads all active spots — no manual fetch needed.
     } catch (e) {
       if (mounted) setState(() => _isLoadingLocation = false);
@@ -226,6 +241,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       });
       _mapController.move(latlng, zoom);
       _restartRadar();
+      _updateRadarSize();
     } catch (e) {
       debugPrint('Geocoding error: $e');
     }
@@ -267,20 +283,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
     final s = ref.watch(appStringsProvider);
     final spots = ref.watch(parkingSpotsProvider);
-    final activeFilters = ref.watch(activeFiltersProvider);
 
-    // Filter by status + 200 m zone, then sort closest → farthest
-    final filtered =
-        spots.where((sp) => !sp.isExpired && activeFilters.contains(sp.status)).toList();
-    final nearby = filtered
+    // Show all non-expired spots within 200 m zone, sorted closest → farthest
+    final nearby = spots
         .where((sp) =>
+            !sp.isExpired &&
             _haversineMeters(_zoneCenter, LatLng(sp.lat, sp.lng)) <= 200)
         .toList()
       ..sort((a, b) =>
           _haversineMeters(_zoneCenter, LatLng(a.lat, a.lng))
               .compareTo(_haversineMeters(_zoneCenter, LatLng(b.lat, b.lng))));
     final visible = nearby;
-    final noSpotsInZone = filtered.isNotEmpty && nearby.isEmpty;
+    final noSpotsInZone = spots.any((sp) => !sp.isExpired) && nearby.isEmpty;
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -297,6 +311,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               onPositionChanged: (pos, _) {
                 if (pos.zoom != null && pos.zoom != _currentZoom) {
                   setState(() => _currentZoom = pos.zoom!);
+                  _updateRadarSize();
                 }
               },
             ),
@@ -337,8 +352,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   markers: [
                     Marker(
                       point: _zoneCenter,
-                      width: 400,
-                      height: 400,
+                      width: _radarPixelRadius * 2,
+                      height: _radarPixelRadius * 2,
                       child: AnimatedBuilder(
                         animation: _radarController,
                         builder: (_, __) => CustomPaint(
@@ -417,34 +432,24 @@ class _MapScreenState extends ConsumerState<MapScreen>
             ),
           ),
 
-          // ── Top: blurred search bar ────────────────────────────────────────
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 72, 0),
-              child: _GlassSearchBar(
-                controller: _searchController,
-                isSearching: _isSearching,
-                onTap: () => setState(() => _isSearching = true),
-                onClose: () => setState(() {
-                  _isSearching = false;
-                  _searchController.clear();
-                }),
-                onSubmitted: (q) => _searchLocation(q),
-                spotCount: visible.length,
-                hintText: s.searchHint,
+          // ── Expanded search bar (slides in from top when active) ──────────
+          if (_isSearching)
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: _GlassSearchBar(
+                  controller: _searchController,
+                  onClose: () => setState(() {
+                    _isSearching = false;
+                    _searchController.clear();
+                  }),
+                  onSubmitted: (q) => _searchLocation(q),
+                  hintText: s.searchHint,
+                ),
               ),
             ),
-          ),
 
-          // ── Filter chips (below search) ────────────────────────────────────
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 72),
-              child: const _GlassFilterBar(),
-            ),
-          ),
-
-          // ── Right side: Hunter button ──────────────────────────────────────
+          // ── Right side buttons ─────────────────────────────────────────────
           Positioned(
             right: 16,
             top: 0,
@@ -453,6 +458,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  // Search icon — top of column when not searching
+                  if (!_isSearching)
+                    _SideIconButton(
+                      icon: Icons.search_rounded,
+                      onTap: () => setState(() => _isSearching = true),
+                    ),
+                  if (!_isSearching) const SizedBox(height: 12),
                   _HunterSideButton(
                     onTap: () => context.go('/report'),
                   ).animate(onPlay: (c) => c.repeat(reverse: true))
@@ -466,6 +478,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       setState(() => _zoneCenter = _currentPosition);
                       _mapController.move(_currentPosition, zoom);
                       _restartRadar();
+                      _updateRadarSize();
                     },
                   ),
                   const SizedBox(height: 12),
@@ -780,130 +793,80 @@ class _LocationDot extends StatelessWidget {
   }
 }
 
-// ── Glass search bar ─────────────────────────────────────────────────────────
+// ── Expanded search bar — full-width white input ──────────────────────────────
 class _GlassSearchBar extends StatelessWidget {
   final TextEditingController controller;
-  final bool isSearching;
-  final VoidCallback onTap;
   final VoidCallback onClose;
   final ValueChanged<String> onSubmitted;
-  final int spotCount;
   final String hintText;
 
   const _GlassSearchBar({
-    required this.controller, required this.isSearching,
-    required this.onTap, required this.onClose,
-    required this.onSubmitted, required this.spotCount,
+    required this.controller,
+    required this.onClose,
+    required this.onSubmitted,
     this.hintText = 'Search address…',
   });
 
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(16),
       child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+        filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
           height: 52,
           decoration: BoxDecoration(
-            color: isSearching
-                ? Colors.white.withValues(alpha: 0.97)
-                : Colors.white.withValues(alpha: 0.94),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: isSearching
-                  ? AppTheme.orange.withValues(alpha: 0.45)
-                  : Colors.black.withValues(alpha: 0.10),
-              width: 1.2,
-            ),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
-                blurRadius: 20,
-                offset: const Offset(0, 4),
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 24,
+                offset: const Offset(0, 6),
               ),
-              if (isSearching)
-                BoxShadow(
-                  color: AppTheme.orange.withValues(alpha: 0.08),
-                  blurRadius: 16,
-                ),
             ],
           ),
-          child: isSearching
-              ? Row(children: [
-                  const SizedBox(width: 16),
-                  Icon(Icons.search_rounded,
-                      color: AppTheme.orange.withValues(alpha: 0.8), size: 19),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      autofocus: true,
-                      style: const TextStyle(
-                          color: Colors.black87,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500),
-                      decoration: InputDecoration(
-                        hintText: hintText,
-                        hintStyle: const TextStyle(
-                            color: Colors.black45,
-                            fontSize: 14),
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      onSubmitted: onSubmitted,
+          child: Row(
+            children: [
+              const SizedBox(width: 16),
+              const Icon(Icons.search_rounded, color: Colors.black54, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  autofocus: true,
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: hintText,
+                    hintStyle: const TextStyle(
+                      color: Color(0xFF888888),
+                      fontSize: 15,
                     ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
                   ),
-                  GestureDetector(
-                    onTap: onClose,
-                    child: Container(
-                      width: 28, height: 28,
-                      margin: const EdgeInsets.only(right: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.07),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.close_rounded,
-                          color: Colors.black54, size: 14),
-                    ),
-                  ),
-                ])
-              : GestureDetector(
-                  onTap: onTap,
-                  behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(children: [
-                      const Icon(Icons.search_rounded,
-                          color: Colors.black45, size: 19),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(hintText,
-                            style: const TextStyle(
-                                color: Colors.black45, fontSize: 14)),
-                      ),
-                      // Spot count badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 9, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppTheme.orange.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                              color: AppTheme.orange.withValues(alpha: 0.35)),
-                        ),
-                        child: Text('$spotCount P',
-                            style: const TextStyle(
-                                color: AppTheme.orange,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.3)),
-                      ),
-                    ]),
-                  ),
+                  onSubmitted: onSubmitted,
                 ),
+              ),
+              GestureDetector(
+                onTap: onClose,
+                child: Container(
+                  width: 32, height: 32,
+                  margin: const EdgeInsets.only(right: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close_rounded, color: Colors.black54, size: 16),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1030,8 +993,11 @@ class _StatusChipState extends State<_StatusChip> {
   }
 }
 
-// ── Side Hunter button — mission-critical CTA ────────────────────────────────
+// ── Side Hunter button — light sky blue FAB with P+ icon ─────────────────────
 class _HunterSideButton extends StatelessWidget {
+  static const _skyBlue = Color(0xFF4FC3F7);
+  static const _skyBlueDark = Color(0xFF0288D1);
+
   final VoidCallback onTap;
   const _HunterSideButton({required this.onTap});
 
@@ -1044,18 +1010,46 @@ class _HunterSideButton extends StatelessWidget {
         height: 60,
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [AppTheme.energy, Color(0xFFBB0055)],
+            colors: [_skyBlue, _skyBlueDark],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           shape: BoxShape.circle,
           boxShadow: [
-            BoxShadow(color: AppTheme.energy.withValues(alpha: 0.75), blurRadius: 28, spreadRadius: 4),
-            BoxShadow(color: AppTheme.energy.withValues(alpha: 0.4), blurRadius: 52, spreadRadius: 8),
+            BoxShadow(color: _skyBlue.withValues(alpha: 0.70), blurRadius: 28, spreadRadius: 4),
+            BoxShadow(color: _skyBlue.withValues(alpha: 0.35), blurRadius: 52, spreadRadius: 8),
           ],
-          border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.5),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.30), width: 1.5),
         ),
-        child: const Icon(Icons.add_location_alt_rounded, color: Colors.white, size: 28),
+        // "P" with a small "+" superscript
+        child: Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            const Text(
+              'P',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 26,
+                fontWeight: FontWeight.w900,
+                height: 1,
+              ),
+            ),
+            const Positioned(
+              top: 10,
+              right: 9,
+              child: Text(
+                '+',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                  height: 1,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
