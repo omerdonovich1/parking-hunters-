@@ -100,11 +100,26 @@ class AppTheme {
   );
 
   // ── Dark theme ─────────────────────────────────────────────────────────────
+  // ── Status chip decoration — glow pill ────────────────────────────────────
+  static BoxDecoration statusChip(Color color, {bool selected = false}) =>
+      BoxDecoration(
+        color: selected ? color.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: selected ? color.withValues(alpha: 0.55) : Colors.white.withValues(alpha: 0.08),
+          width: 1.2,
+        ),
+        boxShadow: selected
+            ? [BoxShadow(color: color.withValues(alpha: 0.30), blurRadius: 14, spreadRadius: 0)]
+            : [],
+      );
+
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      fontFamily: GoogleFonts.spaceGrotesk().fontFamily,
+      // Heebo covers Hebrew + Latin — single font for the whole app
+      fontFamily: GoogleFonts.heebo().fontFamily,
       scaffoldBackgroundColor: bg,
       colorScheme: const ColorScheme.dark(
         primary: orange,
@@ -183,7 +198,7 @@ class AppTheme {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       ),
       dividerTheme: const DividerThemeData(color: divider, thickness: 1, space: 1),
-      textTheme: GoogleFonts.spaceGroteskTextTheme(
+      textTheme: GoogleFonts.heeboTextTheme(
         const TextTheme(
           displayLarge:  TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -0.5),
           displayMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.3),
@@ -207,7 +222,7 @@ class AppTheme {
           statusBarColor: Colors.transparent,
           statusBarIconBrightness: Brightness.light,
         ),
-        titleTextStyle: GoogleFonts.spaceGrotesk(
+        titleTextStyle: GoogleFonts.heebo(
           fontSize: 18,
           fontWeight: FontWeight.w800,
           color: Colors.white,
@@ -222,7 +237,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      fontFamily: GoogleFonts.spaceGrotesk().fontFamily,
+      fontFamily: GoogleFonts.heebo().fontFamily,
       scaffoldBackgroundColor: bgLight,
       colorScheme: ColorScheme.fromSeed(
         seedColor: energy,
@@ -280,7 +295,7 @@ class AppTheme {
         elevation: 0,
         shape: CircleBorder(),
       ),
-      textTheme: GoogleFonts.spaceGroteskTextTheme(
+      textTheme: GoogleFonts.heeboTextTheme(
         const TextTheme(
           displayLarge:  TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: Color(0xFF080B14)),
           headlineLarge: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Color(0xFF080B14)),

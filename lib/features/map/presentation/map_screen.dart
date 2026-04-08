@@ -287,44 +287,66 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 userAgentPackageName: 'com.example.parking_hunter',
                 retinaMode: true,
               ),
-              // ── 200 m Search Zone circle (animated pulse) ────────────────
+              // ── 200 m Search Zone — 3-ring continuous wave pulse ────────
               if (!_isLoadingLocation)
                 AnimatedBuilder(
                   animation: _pulseController,
-                  builder: (_, __) => CircleLayer(
-                    circles: [
-                      // Solid filled zone — breathing opacity
-                      CircleMarker(
-                        point: _zoneCenter,
-                        radius: 200,
-                        useRadiusInMeter: true,
-                        color: AppTheme.neonGreen.withValues(
-                            alpha: 0.04 + 0.025 * _pulseController.value),
-                        borderStrokeWidth: 1.6,
-                        borderColor: AppTheme.neonGreen.withValues(
-                            alpha: 0.35 + 0.25 * _pulseController.value),
-                      ),
-                      // Expanding outer ring — fades out as it grows
-                      CircleMarker(
-                        point: _zoneCenter,
-                        radius: 200 + 12 * _pulseController.value,
-                        useRadiusInMeter: true,
-                        color: Colors.transparent,
-                        borderStrokeWidth: 0.8,
-                        borderColor: AppTheme.neonGreen.withValues(
-                            alpha: 0.18 * (1 - _pulseController.value)),
-                      ),
-                      // Subtle 100 m inner reference ring
-                      CircleMarker(
-                        point: _currentPosition,
-                        radius: 80,
-                        useRadiusInMeter: true,
-                        color: Colors.transparent,
-                        borderStrokeWidth: 0.8,
-                        borderColor: AppTheme.orange.withValues(alpha: 0.12),
-                      ),
-                    ],
-                  ),
+                  builder: (_, __) {
+                    final t = _pulseController.value;
+                    // Three rings at 120° phase offsets → seamless ripple
+                    final r1 = t;
+                    final r2 = (t + 0.33) % 1.0;
+                    final r3 = (t + 0.66) % 1.0;
+                    return CircleLayer(
+                      circles: [
+                        // Core boundary — steady
+                        CircleMarker(
+                          point: _zoneCenter,
+                          radius: 200,
+                          useRadiusInMeter: true,
+                          color: AppTheme.neonGreen.withValues(alpha: 0.04),
+                          borderStrokeWidth: 1.5,
+                          borderColor: AppTheme.neonGreen.withValues(alpha: 0.50),
+                        ),
+                        // Ring 1 — expands 200→250 m, fades to transparent
+                        CircleMarker(
+                          point: _zoneCenter,
+                          radius: 200 + 50 * r1,
+                          useRadiusInMeter: true,
+                          color: Colors.transparent,
+                          borderStrokeWidth: 1.2,
+                          borderColor: AppTheme.neonGreen.withValues(alpha: 0.32 * (1 - r1)),
+                        ),
+                        // Ring 2
+                        CircleMarker(
+                          point: _zoneCenter,
+                          radius: 200 + 50 * r2,
+                          useRadiusInMeter: true,
+                          color: Colors.transparent,
+                          borderStrokeWidth: 1.2,
+                          borderColor: AppTheme.neonGreen.withValues(alpha: 0.32 * (1 - r2)),
+                        ),
+                        // Ring 3
+                        CircleMarker(
+                          point: _zoneCenter,
+                          radius: 200 + 50 * r3,
+                          useRadiusInMeter: true,
+                          color: Colors.transparent,
+                          borderStrokeWidth: 1.2,
+                          borderColor: AppTheme.neonGreen.withValues(alpha: 0.32 * (1 - r3)),
+                        ),
+                        // Inner GPS halo
+                        CircleMarker(
+                          point: _currentPosition,
+                          radius: 55,
+                          useRadiusInMeter: true,
+                          color: AppTheme.orange.withValues(alpha: 0.04),
+                          borderStrokeWidth: 0.8,
+                          borderColor: AppTheme.orange.withValues(alpha: 0.15),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               // ── Parking spot markers — clustered by zoom level ────────────
               MarkerLayer(
@@ -582,7 +604,7 @@ class _MapLoadingShimmer extends StatelessWidget {
   }
 }
 
-// ── Cluster marker — radar sweep style ──────────────────────────────────────
+// ── Cluster marker — minimal count badge ─────────────────────────────────────
 class _ClusterMarker extends StatelessWidget {
   final int count;
   final Color color;
@@ -593,38 +615,34 @@ class _ClusterMarker extends StatelessWidget {
     return Stack(
       alignment: Alignment.center,
       children: [
-        // Outer glow ring
+        // Soft ambient glow
         Container(
-          width: 58,
-          height: 58,
+          width: 56, height: 56,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: color.withValues(alpha: 0.06),
-            border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
+            color: color.withValues(alpha: 0.07),
           ),
         ),
-        // Inner filled circle
+        // Main pill
         Container(
-          width: 46,
-          height: 46,
+          width: 44, height: 44,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: color.withValues(alpha: 0.14),
-            border: Border.all(color: color, width: 2),
+            color: AppTheme.card.withValues(alpha: 0.95),
+            border: Border.all(color: color, width: 1.8),
             boxShadow: [
-              BoxShadow(color: color.withValues(alpha: 0.7), blurRadius: 20, spreadRadius: 3),
-              BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 40, spreadRadius: 6),
+              BoxShadow(color: color.withValues(alpha: 0.55), blurRadius: 14, spreadRadius: 1),
+              BoxShadow(color: color.withValues(alpha: 0.25), blurRadius: 28, spreadRadius: 4),
             ],
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '$count',
-                style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w900, height: 1.1),
+          child: Center(
+            child: Text(
+              '$count',
+              style: TextStyle(
+                color: color, fontSize: 16,
+                fontWeight: FontWeight.w900, height: 1,
               ),
-              Text('🅿️', style: const TextStyle(fontSize: 9)),
-            ],
+            ),
           ),
         ),
       ],
@@ -632,7 +650,7 @@ class _ClusterMarker extends StatelessWidget {
   }
 }
 
-// ── Spot marker — radar blip HUD ─────────────────────────────────────────────
+// ── Spot marker — clean minimal blip ─────────────────────────────────────────
 class _SpotMarker extends StatelessWidget {
   final ParkingSpot spot;
   final Color color;
@@ -649,57 +667,62 @@ class _SpotMarker extends StatelessWidget {
         Stack(
           alignment: Alignment.center,
           children: [
-            // Outer pulse ring
+            // Ambient glow halo
             Container(
-              width: 50,
-              height: 50,
+              width: 52, height: 52,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: color.withValues(alpha: 0.05),
-                border: Border.all(color: color.withValues(alpha: 0.25), width: 1),
+                color: color.withValues(alpha: 0.08),
               ),
             ),
-            // Main blip circle
+            // Core circle — dark fill so text is always legible
             Container(
-              width: 38,
-              height: 38,
+              width: 40, height: 40,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: color.withValues(alpha: 0.12),
-                border: Border.all(color: color, width: 2.5),
+                color: AppTheme.card.withValues(alpha: 0.96),
+                border: Border.all(color: color, width: 2),
                 boxShadow: [
-                  BoxShadow(color: color.withValues(alpha: 0.75), blurRadius: 18, spreadRadius: 3),
-                  BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 36, spreadRadius: 6),
+                  BoxShadow(color: color.withValues(alpha: 0.65), blurRadius: 12, spreadRadius: 1),
+                  BoxShadow(color: color.withValues(alpha: 0.30), blurRadius: 28, spreadRadius: 4),
                 ],
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    conf,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
-                      height: 1.1,
-                    ),
+              child: Center(
+                child: Text(
+                  conf,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    height: 1,
                   ),
-                  Text(
-                    timeAgo,
-                    style: TextStyle(
-                      color: color.withValues(alpha: 0.75),
-                      fontSize: 8,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ],
         ),
+        // Tiny time label below
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: AppTheme.bg.withValues(alpha: 0.75),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              timeAgo,
+              style: TextStyle(
+                color: color.withValues(alpha: 0.85),
+                fontSize: 8,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
         // Pointer tip
         CustomPaint(
-          size: const Size(10, 7),
+          size: const Size(8, 5),
           painter: _TipPainter(color: color),
         ),
       ],
@@ -782,29 +805,55 @@ class _GlassSearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(18),
       child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          height: 50,
+        filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          height: 52,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+            color: isSearching
+                ? Colors.white.withValues(alpha: 0.10)
+                : Colors.white.withValues(alpha: 0.07),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isSearching
+                  ? AppTheme.orange.withValues(alpha: 0.35)
+                  : Colors.white.withValues(alpha: 0.09),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                blurRadius: 20,
+                offset: const Offset(0, 4),
+              ),
+              if (isSearching)
+                BoxShadow(
+                  color: AppTheme.orange.withValues(alpha: 0.08),
+                  blurRadius: 16,
+                ),
+            ],
           ),
           child: isSearching
               ? Row(children: [
-                  const SizedBox(width: 14),
-                  const Icon(Icons.search_rounded, color: Colors.white60, size: 20),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 16),
+                  Icon(Icons.search_rounded,
+                      color: AppTheme.orange.withValues(alpha: 0.8), size: 19),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: TextField(
                       controller: controller,
                       autofocus: true,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500),
                       decoration: InputDecoration(
                         hintText: hintText,
-                        hintStyle: const TextStyle(color: Colors.white38),
+                        hintStyle: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.3),
+                            fontSize: 14),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
@@ -812,35 +861,50 @@ class _GlassSearchBar extends StatelessWidget {
                       onSubmitted: onSubmitted,
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, color: Colors.white60, size: 20),
-                    onPressed: onClose,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                  GestureDetector(
+                    onTap: onClose,
+                    child: Container(
+                      width: 28, height: 28,
+                      margin: const EdgeInsets.only(right: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close_rounded,
+                          color: Colors.white54, size: 14),
+                    ),
                   ),
                 ])
               : GestureDetector(
                   onTap: onTap,
                   behavior: HitTestBehavior.opaque,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Row(children: [
-                      const Icon(Icons.search_rounded, color: Colors.white60, size: 20),
+                      const Icon(Icons.search_rounded,
+                          color: Colors.white38, size: 19),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(hintText,
                             style: const TextStyle(
-                                color: Colors.white38, fontSize: 14)),
+                                color: Colors.white30, fontSize: 14)),
                       ),
+                      // Spot count badge
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 4),
                         decoration: BoxDecoration(
-                          color: AppTheme.orange.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppTheme.orange.withValues(alpha: 0.4)),
+                          color: AppTheme.orange.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                              color: AppTheme.orange.withValues(alpha: 0.35)),
                         ),
-                        child: Text('$spotCount 🅿️',
-                            style: const TextStyle(color: AppTheme.orange, fontSize: 11, fontWeight: FontWeight.w700)),
+                        child: Text('$spotCount P',
+                            style: const TextStyle(
+                                color: AppTheme.orange,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.3)),
                       ),
                     ]),
                   ),
@@ -851,7 +915,7 @@ class _GlassSearchBar extends StatelessWidget {
   }
 }
 
-// ── Glass filter bar ─────────────────────────────────────────────────────────
+// ── Glow status chip filter bar ───────────────────────────────────────────────
 class _GlassFilterBar extends ConsumerWidget {
   const _GlassFilterBar();
 
@@ -860,20 +924,23 @@ class _GlassFilterBar extends ConsumerWidget {
     final active = ref.watch(activeFiltersProvider);
     final s = ref.watch(appStringsProvider);
     final filters = [
-      (SpotStatus.available,     '🟢', s.filterHigh, AppTheme.neonGreen),
-      (SpotStatus.soonAvailable, '🟡', s.filterMid,  AppTheme.neonYellow),
-      (SpotStatus.lowConfidence, '🔴', s.filterLow,  AppTheme.neonRed),
+      (SpotStatus.available,     s.filterHigh, AppTheme.neonGreen),
+      (SpotStatus.soonAvailable, s.filterMid,  AppTheme.neonYellow),
+      (SpotStatus.lowConfidence, s.filterLow,  AppTheme.neonRed),
     ];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: filters.map((f) {
-          final (status, emoji, label, color) = f;
+          final (status, label, color) = f;
           final selected = active.contains(status);
           return Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: GestureDetector(
+            child: _StatusChip(
+              label: label,
+              color: color,
+              selected: selected,
               onTap: () {
                 final current = Set<SpotStatus>.from(active);
                 if (selected) {
@@ -883,37 +950,82 @@ class _GlassFilterBar extends ConsumerWidget {
                 }
                 ref.read(activeFiltersProvider.notifier).state = current;
               },
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? color.withValues(alpha: 0.2)
-                          : Colors.white.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: selected ? color.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.1),
-                        width: 1.2,
-                      ),
-                    ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Text(emoji, style: const TextStyle(fontSize: 12)),
-                      const SizedBox(width: 5),
-                      Text(label, style: TextStyle(
-                        color: selected ? color : Colors.white54,
-                        fontSize: 12, fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                      )),
-                    ]),
-                  ),
-                ),
-              ),
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+}
+
+class _StatusChip extends StatefulWidget {
+  final String label;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+  const _StatusChip({
+    required this.label, required this.color,
+    required this.selected, required this.onTap,
+  });
+
+  @override
+  State<_StatusChip> createState() => _StatusChipState();
+}
+
+class _StatusChipState extends State<_StatusChip> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.color;
+    final selected = widget.selected;
+    return GestureDetector(
+      onTap: () { HapticFeedback.selectionClick(); widget.onTap(); },
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.94 : 1.0,
+        duration: const Duration(milliseconds: 80),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: AppTheme.statusChip(color, selected: selected),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Dot indicator
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    width: 6, height: 6,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: selected ? color : color.withValues(alpha: 0.35),
+                      boxShadow: selected
+                          ? [BoxShadow(color: color.withValues(alpha: 0.8), blurRadius: 6, spreadRadius: 1)]
+                          : [],
+                    ),
+                  ),
+                  const SizedBox(width: 7),
+                  Text(
+                    widget.label,
+                    style: TextStyle(
+                      color: selected ? color : Colors.white38,
+                      fontSize: 12,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

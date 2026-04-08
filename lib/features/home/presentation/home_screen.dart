@@ -79,61 +79,120 @@ class _FloatingPillNav extends StatelessWidget {
   final ValueChanged<int> onTap;
   final AppStrings s;
 
-  const _FloatingPillNav({required this.selectedIndex, required this.onTap, required this.s});
+  const _FloatingPillNav(
+      {required this.selectedIndex, required this.onTap, required this.s});
 
   @override
   Widget build(BuildContext context) {
     final items = [
-      _NavDef(icon: Icons.radar_rounded,          label: s.navHunt),
-      _NavDef(icon: Icons.person_outline_rounded,  label: s.navProfile),
-      _NavDef(icon: Icons.emoji_events_outlined,   label: s.navRanks),
+      _NavDef(icon: Icons.radar_rounded,         iconFilled: Icons.radar_rounded,           label: s.navHunt),
+      _NavDef(icon: Icons.person_outline_rounded, iconFilled: Icons.person_rounded,          label: s.navProfile),
+      _NavDef(icon: Icons.emoji_events_outlined,  iconFilled: Icons.emoji_events_rounded,    label: s.navRanks),
     ];
+    final bottomPad = MediaQuery.of(context).padding.bottom;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(36, 0, 36, 28),
+      padding: EdgeInsets.fromLTRB(28, 0, 28, (bottomPad > 0 ? bottomPad : 16) + 12),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(32),
+        borderRadius: BorderRadius.circular(36),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+          filter: ImageFilter.blur(sigmaX: 32, sigmaY: 32),
           child: Container(
-            height: 60,
+            height: 68,
             decoration: BoxDecoration(
-              color: AppTheme.card.withValues(alpha: 0.9),
-              borderRadius: BorderRadius.circular(32),
+              // two-tone layered background — richer depth
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.card.withValues(alpha: 0.92),
+                  AppTheme.surface.withValues(alpha: 0.88),
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+              borderRadius: BorderRadius.circular(36),
               border: Border.all(
-                color: AppTheme.orange.withValues(alpha: 0.12),
+                color: Colors.white.withValues(alpha: 0.07),
                 width: 1,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.45),
-                  blurRadius: 40,
-                  offset: const Offset(0, 10),
+                  color: Colors.black.withValues(alpha: 0.55),
+                  blurRadius: 48,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 12),
                 ),
                 BoxShadow(
-                  color: AppTheme.orange.withValues(alpha: 0.06),
-                  blurRadius: 20,
+                  color: AppTheme.orange.withValues(alpha: 0.05),
+                  blurRadius: 24,
                   offset: const Offset(0, 2),
                 ),
               ],
             ),
-            child: Row(
-              children: List.generate(items.length, (i) {
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: () => onTap(i),
-                    behavior: HitTestBehavior.opaque,
-                    child: _PillNavItem(
-                      def: items[i],
-                      selected: i == selectedIndex,
-                    ),
-                  ),
-                );
-              }),
+            child: Stack(
+              children: [
+                // Sliding active background pill
+                _SlidingIndicator(
+                  selectedIndex: selectedIndex,
+                  itemCount: items.length,
+                ),
+                Row(
+                  children: List.generate(items.length, (i) {
+                    return Expanded(
+                      child: GestureDetector(
+                        onTap: () => onTap(i),
+                        behavior: HitTestBehavior.opaque,
+                        child: _PillNavItem(
+                          def: items[i],
+                          selected: i == selectedIndex,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ],
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+/// Animates a blurred pill behind the active nav item.
+class _SlidingIndicator extends StatelessWidget {
+  final int selectedIndex;
+  final int itemCount;
+  const _SlidingIndicator(
+      {required this.selectedIndex, required this.itemCount});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final itemW = constraints.maxWidth / itemCount;
+      return AnimatedPositioned(
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+        left: itemW * selectedIndex + 8,
+        top: 10,
+        bottom: 10,
+        width: itemW - 16,
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppTheme.orange.withValues(alpha: 0.13),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: AppTheme.orange.withValues(alpha: 0.25),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.orange.withValues(alpha: 0.18),
+                blurRadius: 12,
+              ),
+            ],
+          ),
+        ),
+      );
+    });
   }
 }
 
@@ -148,35 +207,25 @@ class _PillNavItem extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-          padding: EdgeInsets.symmetric(
-            horizontal: selected ? 18 : 10,
-            vertical: 5,
-          ),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppTheme.orange.withValues(alpha: 0.14)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(14),
-            border: selected
-                ? Border.all(color: AppTheme.orange.withValues(alpha: 0.3), width: 1)
-                : null,
-          ),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          transitionBuilder: (child, anim) =>
+              ScaleTransition(scale: anim, child: child),
           child: Icon(
-            def.icon,
-            color: selected ? AppTheme.orange : const Color(0xFF3A5A7A),
-            size: 21,
+            selected ? def.iconFilled : def.icon,
+            key: ValueKey(selected),
+            color: selected ? AppTheme.orange : const Color(0xFF2E4A66),
+            size: 22,
           ),
         ),
-        const SizedBox(height: 3),
+        const SizedBox(height: 4),
         AnimatedDefaultTextStyle(
-          duration: const Duration(milliseconds: 220),
+          duration: const Duration(milliseconds: 200),
           style: TextStyle(
-            color: selected ? AppTheme.orange : const Color(0xFF3A5A7A),
+            color: selected ? AppTheme.orange : const Color(0xFF2E4A66),
             fontSize: 10,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            letterSpacing: selected ? 0.3 : 0,
           ),
           child: Text(def.label),
         ),
@@ -187,6 +236,8 @@ class _PillNavItem extends StatelessWidget {
 
 class _NavDef {
   final IconData icon;
+  final IconData iconFilled;
   final String label;
-  const _NavDef({required this.icon, required this.label});
+  const _NavDef(
+      {required this.icon, required this.iconFilled, required this.label});
 }
